@@ -26,10 +26,6 @@ from typing import (
 )
 
 import networkx as nx
-from networkx.classes.coreviews import (
-    FilterAdjacency,
-    FilterAtlas,
-)
 from networkx.classes.filters import no_filter
 
 from eclypse.graph import AssetGraph
@@ -112,15 +108,6 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
             seed=seed,
         )
 
-        if (
-            path_assets_aggregators is not None
-            and edge_assets is not None
-            and not _edge_assets.keys() <= path_assets_aggregators.keys()
-        ):
-            raise ValueError(
-                "The path_assets_aggregators must be a subset of the edge_assets"
-            )
-
         default_path_aggregator = (
             get_default_path_aggregators() if include_default_assets else {}
         )
@@ -136,6 +123,13 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
                     )
                 _path_assets_aggregators[k] = default_path_aggregator[k]
 
+        missing = _edge_assets.keys() - _path_assets_aggregators.keys()
+        if missing:
+            raise ValueError(
+                "Every edge asset must have a corresponding path aggregator. "
+                f"Missing aggregators for: {missing}"
+            )
+
         self.path_assets_aggregators = _path_assets_aggregators
 
         self._path_algorithm: Callable[[nx.Graph, str, str], List[str]] = (
@@ -148,7 +142,59 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
 
         self._available: Optional[nx.DiGraph] = None
         self._paths: Dict[str, Dict[str, List[str]]] = {}
-        self._costs: Dict[str, Dict[str, Tuple[List[Tuple[str, str, Any]], float]]] = {}
+        self._costs: Dict[str, Dict[str, List[Tuple[str, str, Any]]]] = {}
+
+    def add_node(self, node_for_adding: str, strict: bool = False, **assets: Any):
+        """Add a node and invalidate the path cache.
+
+        Args:
+            node_for_adding (str): The node to add.
+            strict (bool): If True, raise an error if the node already exists.
+            **assets: Additional node assets.
+        """
+        super().add_node(node_for_adding, strict=strict, **assets)
+        self._invalidate_cache()
+
+    def add_edge(
+        self,
+        u_of_edge: str,
+        v_of_edge: str,
+        symmetric: bool = False,
+        strict: bool = False,
+        **assets: Any,
+    ):
+        """Add an edge and invalidate the path cache.
+
+        Args:
+            u_of_edge (str): The source node of the edge.
+            v_of_edge (str): The target node of the edge.
+            symmetric (bool): If True, add the edge in both directions.
+            strict (bool): If True, raise an error if the edge already exists.
+            **assets: Additional edge assets.
+        """
+        super().add_edge(
+            u_of_edge, v_of_edge, symmetric=symmetric, strict=strict, **assets
+        )
+        self._invalidate_cache()
+
+    def remove_node(self, n: str):
+        """Remove a node and invalidate the path cache.
+
+        Args:
+            n (str): The node to remove.
+        """
+        super().remove_node(n)
+        self._invalidate_cache()
+
+    def remove_edge(self, u: str, v: str):
+        """Remove an edge and invalidate the path cache.
+
+        Args:
+            u (str): The source node of the edge.
+            v (str): The target node of the edge.
+        """
+        super().remove_edge(u, v)
+        self._invalidate_cache()
 
     def contains(self, other: nx.DiGraph) -> List[str]:
         """Comparison between requirements and infrastructure resources.
@@ -185,20 +231,19 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
 
     def path(
         self, source: str, target: str
-    ) -> Optional[Tuple[List[Tuple[str, str, Dict[str, Any]]], float]]:
-        """Retrieve the path between two nodes, if it exists.
+    ) -> Optional[List[Tuple[str, str, Dict[str, Any]]]]:
+        """Retrieve the hop-level path between two nodes, if it exists.
 
-        If the path does not exist, it is computed and cached, with costs for each hop.
-        Both the path and the costs are recomputed if any of the hop costs has changed
-        by more than 5%.
+        If the path has not been computed yet, or if any hop cost has changed
+        by more than the configured threshold, the path is recomputed and cached.
 
         Args:
             source (str): The name of the source node.
             target (str): The name of the target node.
 
         Returns:
-            Optional[List[Tuple[str, str, float]]]: The path between the two nodes in the \
-                form (source, target, cost), or None if the path does not exist.
+            Optional[List[Tuple[str, str, Dict[str, Any]]]]: The per-hop costs as \
+                (source, target, edge_attributes), or None if no path exists.
         """
         try:
             if source not in self._paths or target not in self._paths[source]:
@@ -208,15 +253,14 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
             else:
                 costs = [
                     c.get("latency", 1)
-                    for _, _, c in self._path_costs(self._paths[source][target])[0]
+                    for _, _, c in self._path_costs(self._paths[source][target])
                 ]
                 cached_costs = [
-                    cc.get("latency", 1) for _, _, cc in self._costs[source][target][0]
+                    cc.get("latency", 1) for _, _, cc in self._costs[source][target]
                 ]
 
-                # check if any hop cost changed by more than 5%
                 if len(costs) != len(cached_costs) or any(
-                    (abs(c - cc) / cc >= COST_RECOMPUTATION_THRESHOLD if cc != 0 else 0)
+                    _cost_changed(c, cc)
                     for c, cc in zip(costs, cached_costs, strict=False)
                 ):
                     self._compute_path(source, target)
@@ -224,6 +268,29 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
             return self._costs[source][target]
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             return None
+
+    def processing_time(self, source: str, target: str) -> float:
+        """Compute the total processing time of all nodes along the path.
+
+        Calls :py:meth:`path` first to ensure the node list is cached, then
+        sums the ``processing_time`` attribute of every node on that path.
+        Returns 0.0 when source and target are the same node or when no path
+        exists.
+
+        Args:
+            source (str): The name of the source node.
+            target (str): The name of the target node.
+
+        Returns:
+            float: The total processing time along the path, in the same unit \
+                as the individual node ``processing_time`` attributes.
+        """
+        if source == target or self.path(source, target) is None:
+            return 0.0
+        return sum(
+            self.nodes[n].get("processing_time", MIN_FLOAT)
+            for n in self._paths[source][target]
+        )
 
     def path_resources(self, source: str, target: str) -> Dict[str, Any]:
         """Retrieve the resources of the path between two nodes, if it exists.
@@ -247,9 +314,19 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
             return self.edge_assets.lower_bound
 
         return {
-            k: (aggr([c[k] for _, _, c in path[0]]))
+            k: (aggr([c[k] for _, _, c in path]))
             for k, aggr in self.path_assets_aggregators.items()
         }
+
+    def _invalidate_cache(self):
+        """Invalidate the path and cost caches, and reset the available view.
+
+        Must be called whenever the graph topology changes (node or edge
+        addition/removal), so that stale paths are not returned.
+        """
+        self._paths.clear()
+        self._costs.clear()
+        self._available = None
 
     def _compute_path(self, source: str, target: str):
         """Compute the path between two nodes using the given algorithm, and cache it.
@@ -258,76 +335,40 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
             source (str): The name of the source node.
             target (str): The name of the target node.
         """
-        self._paths.setdefault(source, {})[target] = self._path_algorithm(
-            self.available, source, target
-        )
-        self._costs.setdefault(source, {})[target] = self._path_costs(
-            self._paths[source][target]
-        )
+        path_nodes = self._path_algorithm(self.available, source, target)
 
-    def _path_costs(
-        self, path: List[str]
-    ) -> Tuple[List[Tuple[str, str, Dict[str, Any]]], float]:
-        """Compute the costs of a path in the form (source, target, cost).
+        self._paths.setdefault(source, {})[target] = path_nodes
+        self._costs.setdefault(source, {})[target] = self._path_costs(path_nodes)
+
+    def _path_costs(self, path: List[str]) -> List[Tuple[str, str, Dict[str, Any]]]:
+        """Compute the per-hop costs of a path.
 
         Args:
             path (List[str]): The path as a list of node IDs.
 
         Returns:
-            List[Tuple[str, str, float]]: The costs of the path in the form (source, target, cost).
+            List[Tuple[str, str, Dict[str, Any]]]: The per-hop costs as \
+                (source, target, edge_attributes) for each consecutive pair.
         """
-        total_processing_time = sum(
-            self.nodes[n].get("processing_time", MIN_FLOAT) for n in path
-        )
-        costs = [(s, t, self.edges[s, t]) for s, t in nx.utils.pairwise(path)]
-        return costs, total_processing_time
+        return [(s, t, self.edges[s, t]) for s, t in nx.utils.pairwise(path)]
 
     @property
-    def available(self) -> Infrastructure:
-        # pylint: disable=invalid-name,protected-access,attribute-defined-outside-init
-        """Return the subgraph with only the available nodes.
+    def available(self) -> nx.DiGraph:
+        """Return a filtered view containing only the available nodes.
+
+        Uses nx.subgraph_view to avoid creating a full Infrastructure instance.
+        The view is dynamic: it reflects the current state of the graph at all
+        times, filtering out nodes where availability <= 0.
 
         Returns:
-            nx.DiGraph: A subgraph with only the available nodes, named "av-{id}".
+            nx.DiGraph: A subgraph view with only the available nodes.
         """
         if self._available is None:
-            self._available = nx.freeze(
-                self.__class__(
-                    infrastructure_id=f"av-{self.id}",
-                    placement_strategy=self.strategy,
-                    node_update_policy=self.node_update_policy,
-                    edge_update_policy=self.edge_update_policy,
-                    node_assets=self.node_assets,
-                    edge_assets=self.edge_assets,
-                    path_assets_aggregators=self.path_assets_aggregators,
-                    path_algorithm=self._path_algorithm,
-                )
+            self._available = nx.subgraph_view(
+                self,
+                filter_node=self.is_available,
+                filter_edge=no_filter,
             )
-            filter_node = self.is_available
-            filter_edge = no_filter
-            self._available._NODE_OK = filter_node
-            self._available._EDGE_OK = filter_edge
-
-            # create view by assigning attributes from G
-            self._available._graph = self
-            self._available.graph = self.graph
-            self._available._node = FilterAtlas(self._node, filter_node)
-
-            def reverse_edge(u, v):
-                return filter_edge(v, u)
-
-            if self.is_directed():
-                self._available._succ = FilterAdjacency(
-                    self._succ, filter_node, filter_edge
-                )
-                self._available._pred = FilterAdjacency(
-                    self._pred, filter_node, reverse_edge
-                )
-
-            else:
-                self._available._adj = FilterAdjacency(
-                    self._adj, filter_node, filter_edge
-                )
         return self._available
 
     def is_available(self, n: str):
@@ -383,3 +424,23 @@ def _get_default_path_algorithm(g: nx.Graph, source: str, target: str) -> List[s
         List[str]: The list of node IDs in the shortest path.
     """
     return nx.dijkstra_path(g, source, target, weight=_default_weight_function)
+
+
+def _cost_changed(current: float, cached: float) -> bool:
+    """Check whether a hop cost has changed beyond the recomputation threshold.
+
+    If the cached cost is zero and the current cost is not, the change
+    is considered significant by definition (avoids division by zero).
+
+    Args:
+        current (float): The current cost of the hop.
+        cached (float): The previously cached cost of the hop.
+
+    Returns:
+        bool: True if the cost changed beyond the threshold.
+    """
+    return (
+        current != 0
+        if cached == 0
+        else abs(current - cached) / cached >= COST_RECOMPUTATION_THRESHOLD
+    )
