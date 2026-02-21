@@ -8,18 +8,13 @@ class MM1Infrastructure(Infrastructure):
     """
     Extension of the Infrastructure model of ECLYPSE to simulate a network of
     routers using M/M/1 queuing logic.
-    The class is meant to add stateful behaviour to links (memory of when they
-    become free), physical properties (bandwidth and propagation speed), and
-    routing tables to simulate realistic packet forwarding delays.
-
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # This dictionary will track the next free time for each link (u, v) to simulate M/M/1 queues.
         self.link_next_free_time = defaultdict(float)
 
-        # ROUTING TABLES
-        # Structure: { "CurrentNode": { "FinalDestination": "NextHop" } }
-        # Es: "Router1": { "Dest": "Router2" }
+        # dictionary to store routing tables for each node: routing_tables[node][destination] = next_hop
         self.routing_tables = defaultdict(dict)
 
     def add_physical_link(self, u: str, v: str, bandwidth_mbps: float, length_km: float, propagation_speed_km_s: float = 200000.0, **kwargs):
@@ -49,7 +44,7 @@ class MM1Infrastructure(Infrastructure):
             **kwargs
         )
 
-    def calculate_mm1_delay(self, u: str, v: str, packet_size_bytes: int, current_time: float) -> dict:
+    def calculate_mm1_delay(self, u: str, v: str, edge_data: dict, packet_size_bytes: int, current_time: float) -> dict:
         """
         calculates the delay components for a single packet traversing a
         specific link (u->v) based on M/M/1 queuing delay.
@@ -64,15 +59,11 @@ class MM1Infrastructure(Infrastructure):
                 - 'queue_delay': Time spent waiting in the buffer (seconds).
                 - 'service_time': Time spent transmitting the packet bits (seconds).
                 - 'propagation_delay': Time spent travelling the physical medium (seconds).
-                - 'total delay': Sum of all delay components (seconds).
+                - 'total_delay': Sum of all delay components (seconds).
                 - 'finish_time': Simulation time when the packet fully arrives at node 'v'.
             Returns None if the edge (u, v) does not exist.
 
         """
-        edge_data = self.edges.get((u, v))
-        if not edge_data:
-            return None
-
         bandwidth_bps = edge_data.get("bandwidth", 10_000_000)
         propagation_delay_s = edge_data.get("propagation_delay_s", 0.0)
 
@@ -97,16 +88,9 @@ class MM1Infrastructure(Infrastructure):
             "finish_time": service_finish_time + propagation_delay_s
         }
 
-    # Method to install routing tables for all nodes
     def install_shortest_path_routes(self):
         """
-        Populates the routing tables of all nodes in the network using
-        Shortest Path First (SPF) logic.
-        This method simulates the convergence of a routing protocol (like
-        OSPF).
-        It iterates through all node pairs, calculates the shortest path using
-        NetworkX's Dijkstra algorithm, and updates the `routing_tables` so
-        that every node knows the next hop to reach any destination.
+        installs routing tables for each node in the network using shortest path logic based on latency.
         """
         nodes = list(self.nodes)
         print("--- Configuration of Routing Tables (OSPF simulation) ---")
@@ -115,74 +99,35 @@ class MM1Infrastructure(Infrastructure):
             for dest in nodes:
                 if source == dest:
                     continue
-
                 try:
-                    # Calculate the shortest path
-                    path = nx.shortest_path(self, source, dest)
-                    # The next hop is the second node in the path [Source, Next, ..., Dest]
+                    # Calculate the shortest path based on latency and store the next hop in the routing table.
+                    path = nx.shortest_path(self, source, dest, weight='latency')
                     next_hop = path[1]
-
-                    # Install the rule in the routing table
                     self.routing_tables[source][dest] = next_hop
-                    # print(f"Rule on {source}: To {dest} -> via {next_hop}")
                 except nx.NetworkXNoPath:
                     pass  # No path exists
         print("Routing tables installed on all nodes.")
 
     def get_next_hop(self, current_node: str, final_dest: str):
-        """
-        Looks up the next hop for a packet at `current_node` bound for 
-        `final_dest`.
-
-        Args:
-            current_node (str): The ID of the node currently holding the packet.
-            final_dest (str): The ID of the packet's final destination.
-
-        Returns:
-            str: The ID of the next node to forward the packet to, or None if no route exists.
-        """
         return self.routing_tables[current_node].get(final_dest)
 
-    # Use the routing tables instead of nx.shortest_path
     def simulate_packet_routing(self, source: str, target: str, packet_size_bytes: int, start_time: float):
-        """
-        Simulates the end-to-end delivery of a packet by hopping from node
-        to node using the routing tables.
-
-        This method models the packet's journey through the network,
-        dynamically looking up the next hop at each step and accumulating delay
-        (queue + service + propagation).
-
-        Args:
-            source (str): The ID of the starting node.
-            target (str): The ID of the destination node.
-            packet_size_bytes (int): The size of the packet in bytes.
-            start_time (float): The simulation time when the packet is generated.
-        Returns:
-            dict: A dictionary containing the result of the transmission:
-                - 'status': "DELIVERED", "DROPPED", or "FAILED".
-                - 'path': List of node IDs visited (e.g., ['A', 'B', 'C']).
-                - 'total_e2e_delay': Total end-to-end delay in seconds.
-                - 'hops': List of dictionaries with detailed stats for each hop.
-        """
         current_node = source
         current_t = start_time
         hop_details = []
-        path_taken = [source]  # To track the actual path taken
+        path_taken = [source]
 
-        # Loop to avoid infinite loops (max 20 hops)
         for _ in range(20):
             if current_node == target:
-                break  # Arrived
+                break
 
-            # Routing decision (table lookup)
             next_node = self.get_next_hop(current_node, target)
 
             if not next_node:
                 return {"status": "DROPPED", "reason": f"No route from {current_node} to {target}", "path": path_taken}
 
-            # link traversal
-            stats = self.calculate_mm1_delay(current_node, next_node, packet_size_bytes, current_t)
+            edge_data = self.edges[current_node, next_node]
+            stats = self.calculate_mm1_delay(current_node, next_node, edge_data, packet_size_bytes, current_t)
 
             if not stats:
                 return {"status": "FAILED", "reason": f"Link fail {current_node}->{next_node}"}
