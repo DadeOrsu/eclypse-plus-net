@@ -32,9 +32,9 @@ class NetworkSimulation(Simulation):
                             packet_size_bytes=packet['size'],
                             start_time=self.current_time_s
                         )
-
+                        print(result['path'])
                         if result['status'] == 'DELIVERED':
-                            # Let's save the ENTIRE list of hops.
+                            # save the ENTIRE list of hops.
                             self.network_results.append({
                                 "Tick": tick,
                                 "Packet_ID": packet['id'],
