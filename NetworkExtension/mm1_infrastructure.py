@@ -17,7 +17,9 @@ class MM1Infrastructure(Infrastructure):
         # dictionary to store routing tables for each node: routing_tables[node][destination] = next_hop
         self.routing_tables = defaultdict(dict)
 
-    def add_physical_link(self, u: str, v: str, bandwidth_mbps: float, length_km: float, propagation_speed_km_s: float = 200000.0, **kwargs):
+    def add_physical_link(self, u: str, v: str, bandwidth_mbps: float, length_km: float,
+                          propagation_speed_km_s: float = 200000.0,
+                          processing_delay_s: float = 0.0001, **kwargs):
         """
         Adds a network link between two nodes with defined physical properties.
         This method converts high-level physical parameters (like Mbps and km)
@@ -30,17 +32,20 @@ class MM1Infrastructure(Infrastructure):
             length_km (float): The physical length of the cable in Kilometers.
             propagation_speed_km_s (float, optional): The speed of signal propagation in km/s. 
                 Defaults to 200,000.0 km/s (typical for fiber optics).
+            processing_delay_s (float, optional): The fixed processing delay at the router in seconds.
+                Defaults to 0.0001 seconds (100 microseconds).
             **kwargs: Additional edge attributes (e.g., 'cost', 'reliability').
         """
         bandwidth_bps = bandwidth_mbps * 1_000_000
-        propagation_delay_s = length_km / propagation_speed_km_s
-        propagation_delay_ms = propagation_delay_s * 1000.0
 
         self.add_edge(
             u, v,
-            bandwidth=bandwidth_bps,
-            propagation_delay_s=propagation_delay_s,
-            latency=propagation_delay_ms,
+            bandwidth=bandwidth_bps,                       # R (bit rate in bps)
+            length_km=length_km,                           # d (distance in km)
+            propagation_speed_km_s=propagation_speed_km_s,  # s (speed in km/s)
+            processing_delay_s=processing_delay_s,         # d_proc
+            # Fixed latency for routing calculations
+            latency=(length_km / propagation_speed_km_s) * 1000.0,
             **kwargs
         )
 
@@ -56,36 +61,52 @@ class MM1Infrastructure(Infrastructure):
             current_time (float): The simulation time at which the packet arrives at node 'u'.
         Returns:
             dict: A dictionary containing delay statistics:
+                - 'processing_delay': Time spent processing the packet at node 'u' (seconds).
                 - 'queue_delay': Time spent waiting in the buffer (seconds).
-                - 'service_time': Time spent transmitting the packet bits (seconds).
+                - 'transmission_delay': Time spent transmitting the packet bits (seconds).
                 - 'propagation_delay': Time spent travelling the physical medium (seconds).
                 - 'total_delay': Sum of all delay components (seconds).
                 - 'finish_time': Simulation time when the packet fully arrives at node 'v'.
             Returns None if the edge (u, v) does not exist.
 
         """
-        bandwidth_bps = edge_data.get("bandwidth", 10_000_000)
-        propagation_delay_s = edge_data.get("propagation_delay_s", 0.0)
+        # Processing delay (d_proc)
+        d_proc = edge_data.get("processing_delay_s", 0.0001)
+        time_after_processing = current_time + d_proc
 
-        packet_bits = packet_size_bytes * 8
-        avg_service_time = packet_bits / bandwidth_bps
-        actual_service_time = random.expovariate(1.0/avg_service_time) if avg_service_time > 0 else 0.0
+        # Transmission delay (d_trans = L / R)
+        L = packet_size_bytes * 8                  # Packet size in bits
+        R = edge_data.get("bandwidth", 10_000_000)  # Bit rate (bps)
+        d_trans_teorico = L / R if R > 0 else 0.0
 
+        # Requirement M/M/1: The theoretical delay (L/R) serves as the mean service time (1/mu)
+        # for the exponential distribution. (Removing 'random.expovariate' makes it M/D/1.)
+        d_trans = random.expovariate(1.0 / d_trans_teorico) if d_trans_teorico > 0 else 0.0
+
+        # Queuing delay (d_queue)
         last_free_time = self.link_next_free_time[(u, v)]
-        service_start_time = max(current_time, last_free_time)
-        queuing_delay = service_start_time - current_time
+        service_start_time = max(time_after_processing, last_free_time)
+        d_queue = service_start_time - time_after_processing
 
-        service_finish_time = service_start_time + actual_service_time
+        # Link update: The link will be busy until the packet finishes transmission.
+        service_finish_time = service_start_time + d_trans
         self.link_next_free_time[(u, v)] = service_finish_time
 
-        total_delay = (service_finish_time - current_time) + propagation_delay_s
+        # Propagation delay (d_prop = d / s)
+        d = edge_data.get("length_km", 0.0)                           # Length of the link in km
+        s = edge_data.get("propagation_speed_km_s", 200000.0)         # Propagation speed in km/s
+        d_prop = d / s if s > 0 else 0.0
+
+        # Total delay
+        total_delay = d_proc + d_queue + d_trans + d_prop
 
         return {
-            "queue_delay": queuing_delay,
-            "service_time": actual_service_time,
-            "propagation_delay": propagation_delay_s,
+            "processing_delay": d_proc,
+            "queue_delay": d_queue,
+            "transmission_delay": d_trans,
+            "propagation_delay": d_prop,
             "total_delay": total_delay,
-            "finish_time": service_finish_time + propagation_delay_s
+            "finish_time": service_finish_time + d_prop
         }
 
     def install_shortest_path_routes(self):
@@ -134,7 +155,10 @@ class MM1Infrastructure(Infrastructure):
 
             hop_details.append({
                 "hop": f"{current_node}->{next_node}",
-                "queue": stats['queue_delay'],
+                "processing_ms": stats['processing_delay'] * 1000.0,
+                "queue_ms": stats['queue_delay'] * 1000.0,
+                "transmission_ms": stats['transmission_delay'] * 1000.0,
+                "propagation_ms": stats['propagation_delay'] * 1000.0,
                 "arrival_at_next": stats['finish_time']
             })
 
