@@ -7,36 +7,17 @@ from eclypse.graph import Infrastructure
 class MM1Infrastructure(Infrastructure):
     """
     Extension of the Infrastructure model of ECLYPSE to simulate a network of
-    routers using M/M/1 queuing logic.
+    routers using M/M/1 queuing logic, with physical packet queuing.
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # This dictionary will track the next free time for each link (u, v) to simulate M/M/1 queues.
         self.link_next_free_time = defaultdict(float)
-        # dictionary to store routing tables for each node: routing_tables[node][destination] = next_hop
         self.routing_tables = defaultdict(dict)
-        # This dictionary will store the queue of packets for each link (u, v).
         self.link_queues = defaultdict(deque)
 
     def add_physical_link(self, u: str, v: str, bandwidth_mbps: float, length_km: float,
                           propagation_speed_km_s: float = 200000.0,
                           processing_delay_s: float = 0.0001, **kwargs):
-        """
-        Adds a network link between two nodes with defined physical properties.
-        This method converts high-level physical parameters (like Mbps and km)
-        into simulation-ready units (bps and seconds) and stores them as edge
-        attributes.
-        Args:
-            u (str): The source node ID.
-            v (str): The destination node ID.
-            bandwidth_mbps (float): The link bandwidth (transmission speed) in Megabits per second.
-            length_km (float): The physical length of the cable in Kilometers.
-            propagation_speed_km_s (float, optional): The speed of signal propagation in km/s. 
-                Defaults to 200,000.0 km/s (typical for fiber optics).
-            processing_delay_s (float, optional): The fixed processing delay at the router in seconds.
-                Defaults to 0.0001 seconds (100 microseconds).
-            **kwargs: Additional edge attributes (e.g., 'cost', 'reliability').
-        """
         bandwidth_bps = bandwidth_mbps * 1_000_000
         self.add_edge(
             u, v,
@@ -48,7 +29,7 @@ class MM1Infrastructure(Infrastructure):
             **kwargs
         )
 
-    def calculate_mm1_delay(self, u: str, v: str, edge_data: dict, packet_size_bytes: int, current_time: float) -> dict:
+    def calculate_mm1_delay(self, u: str, v: str, edge_data: dict, packet: dict, current_time: float) -> dict:
         """
         calculates the delay components for a single packet traversing a
         specific link (u->v) based on M/M/1 queuing delay.
@@ -56,7 +37,7 @@ class MM1Infrastructure(Infrastructure):
         Args:
             u (str): The source node ID of the link.
             v (str): The destination node ID of the link.
-            packet_size_bytes (int): The size of the packet in bytes.
+            packet (dict): The packet dictionary containing at least 'size' key.
             current_time (float): The simulation time at which the packet arrives at node 'u'.
         Returns:
             dict: A dictionary containing delay statistics:
@@ -69,43 +50,33 @@ class MM1Infrastructure(Infrastructure):
             Returns None if the edge (u, v) does not exist.
 
         """
-        # Processing delay (d_proc)
         d_proc = edge_data.get("processing_delay_s", 0.0001)
         time_after_processing = current_time + d_proc
 
-        # Management of the queue of the link (u, v)
         queue = self.link_queues[(u, v)]
 
-        # We remove from the queue all packets that have already finished their transmission
-        # before the arrival of our packet (time_after_processing)
-        while queue and queue[0] <= time_after_processing:
-            queue.popleft()
+        # We discard packets that have already completed transmission.
+        # queue[0][0] accesses the `service_finish_time` of the first packet in the queue.
+        while queue and queue[0][0] <= time_after_processing:
+            popped_time, popped_packet = queue.popleft()
+            print(f"[{popped_time:10.6f}s] | Packet: {popped_packet['id']:<5} | Link: {u:^3} -> {v:^3} | Status: FINISHED")
 
-        # We measure the number of packets currently in the queue (before adding our packet)
         current_queue_length = len(queue)
-        # ----------------------------------
-
-        # 2. Transmission delay (d_trans = L / R)
-        L = packet_size_bytes * 8
+        # M/M/1 delay calculations using packet['size']
+        L = packet['size'] * 8
         R = edge_data.get("bandwidth", 10_000_000)
-        d_trans_theoretical = L / R if R > 0 else 0.0
-        d_trans = random.expovariate(1.0 / d_trans_theoretical) if d_trans_theoretical > 0 else 0.0
+        d_trans_teorico = L / R if R > 0 else 0.0
+        d_trans = random.expovariate(1.0 / d_trans_teorico) if d_trans_teorico > 0 else 0.0
 
-        # 3. Queuing delay (d_queue)
         last_free_time = self.link_next_free_time[(u, v)]
         service_start_time = max(time_after_processing, last_free_time)
         d_queue = service_start_time - time_after_processing
 
-        # Update the state of the link (u, v)
         service_finish_time = service_start_time + d_trans
         self.link_next_free_time[(u, v)] = service_finish_time
 
-        # Insertion in the queue
-        # Add the packet to the queue (represented by its finish time) to simulate the M/M/1 queue
-        queue.append(service_finish_time)
-        # ------------------------------
-
-        # 4. Propagation delay (d_prop = d / s)
+        # Insert the packet into the queue with its expected finish time
+        queue.append((service_finish_time, packet))
         d = edge_data.get("length_km", 0.0)
         s = edge_data.get("propagation_speed_km_s", 200000.0)
         d_prop = d / s if s > 0 else 0.0
@@ -127,7 +98,6 @@ class MM1Infrastructure(Infrastructure):
         installs routing tables for each node in the network using shortest path logic based on latency.
         """
         nodes = list(self.nodes)
-        print("--- Configuration of Routing Tables (OSPF simulation) ---")
         for source in nodes:
             for dest in nodes:
                 if source == dest: continue
@@ -136,16 +106,17 @@ class MM1Infrastructure(Infrastructure):
                     self.routing_tables[source][dest] = path[1]
                 except nx.NetworkXNoPath:
                     pass
-        print("Routing tables installed on all nodes.")
 
     def get_next_hop(self, current_node: str, final_dest: str):
         return self.routing_tables[current_node].get(final_dest)
 
-    def simulate_packet_routing(self, source: str, target: str, packet_size_bytes: int, start_time: float):
-        current_node = source
+    def simulate_packet_routing(self, packet: dict, start_time: float):
+
+        current_node = packet['src']
+        target = packet['dst']
         current_t = start_time
         hop_details = []
-        path_taken = [source]
+        path_taken = [current_node]
 
         for _ in range(20):
             if current_node == target: break
@@ -155,7 +126,7 @@ class MM1Infrastructure(Infrastructure):
                 return {"status": "DROPPED", "reason": f"No route from {current_node} to {target}", "path": path_taken}
 
             edge_data = self.edges[current_node, next_node]
-            stats = self.calculate_mm1_delay(current_node, next_node, edge_data, packet_size_bytes, current_t)
+            stats = self.calculate_mm1_delay(current_node, next_node, edge_data, packet, current_t)
 
             if not stats:
                 return {"status": "FAILED", "reason": f"Link fail {current_node}->{next_node}"}
