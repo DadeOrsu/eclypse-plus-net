@@ -27,14 +27,10 @@ class NetworkSimulation(Simulation):
 
                     for packet in packets:
                         result = self.infrastructure.simulate_packet_routing(
-                            source=packet['src'],
-                            target=packet['dst'],
-                            packet_size_bytes=packet['size'],
+                            packet=packet,  
                             start_time=self.current_time_s
                         )
-                        print(result['path'])
                         if result['status'] == 'DELIVERED':
-                            # save the ENTIRE list of hops.
                             self.network_results.append({
                                 "Tick": tick,
                                 "Packet_ID": packet['id'],
@@ -45,7 +41,6 @@ class NetworkSimulation(Simulation):
                                 "End_Time": result['end_time'],
                                 "Total_Delay_ms": result['total_e2e_delay'] * 1000,
                                 "Hops_Count": len(result['path']) - 1,
-                                # We save the complete raw data
                                 "Hops_Details": result['hops']
                             })
 
