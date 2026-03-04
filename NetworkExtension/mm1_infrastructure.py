@@ -59,7 +59,7 @@ class MM1Infrastructure(Infrastructure):
         # queue[0][0] accesses the `service_finish_time` of the first packet in the queue.
         while queue and queue[0][0] <= time_after_processing:
             popped_time, popped_packet = queue.popleft()
-            print(f"[{popped_time:10.6f}s] | Packet: {popped_packet['id']:<5} | Link: {u:^3} -> {v:^3} | Status: FINISHED")
+            # print(f"[{popped_time:10.6f}s] | Packet: {popped_packet['id']:<5} | Link: {u:^3} -> {v:^3} | Status: FINISHED")
 
         current_queue_length = len(queue)
         # M/M/1 delay calculations using packet['size']
@@ -97,6 +97,9 @@ class MM1Infrastructure(Infrastructure):
         """
         installs routing tables for each node in the network using shortest path logic based on latency.
         """
+        # empty the old routing tables before recalculating them
+        self.routing_tables.clear()
+
         nodes = list(self.nodes)
         for source in nodes:
             for dest in nodes:
@@ -106,6 +109,7 @@ class MM1Infrastructure(Infrastructure):
                     self.routing_tables[source][dest] = path[1]
                 except nx.NetworkXNoPath:
                     pass
+        print("[OSPF] Routing tables recalculated and updated on active nodes.")
 
     def get_next_hop(self, current_node: str, final_dest: str):
         return self.routing_tables[current_node].get(final_dest)
@@ -119,11 +123,15 @@ class MM1Infrastructure(Infrastructure):
         path_taken = [current_node]
 
         for _ in range(20):
-            if current_node == target: break
+            if current_node == target:
+                break
 
             next_node = self.get_next_hop(current_node, target)
             if not next_node:
                 return {"status": "DROPPED", "reason": f"No route from {current_node} to {target}", "path": path_taken}
+
+            if not self.has_edge(current_node, next_node):
+                return {"status": "DROPPED", "reason": f"Link fail {current_node}->{next_node} is down", "path": path_taken}
 
             edge_data = self.edges[current_node, next_node]
             stats = self.calculate_mm1_delay(current_node, next_node, edge_data, packet, current_t)
@@ -152,3 +160,15 @@ class MM1Infrastructure(Infrastructure):
             "total_e2e_delay": current_t - start_time,
             "hops": hop_details
         }
+
+    def remove_node(self, n: str):
+        "simulates a node failure of a node and the consequent OSPF recalculation."
+        super().remove_node(n)
+        print(f"[FAILURE] Node {n} has failed and been removed from the network.")
+        self.install_shortest_path_routes()
+
+    def remove_edge(self, u: str, v: str):
+        "simulates a link failure and the consequent OSPF recalculation."
+        super().remove_edge(u, v)
+        print(f"[FAILURE] Link {u} -> {v} has failed and been removed from the network.")
+        self.install_shortest_path_routes()
