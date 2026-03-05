@@ -58,8 +58,7 @@ class MM1Infrastructure(Infrastructure):
         # We discard packets that have already completed transmission.
         # queue[0][0] accesses the `service_finish_time` of the first packet in the queue.
         while queue and queue[0][0] <= time_after_processing:
-            popped_time, popped_packet = queue.popleft()
-            # print(f"[{popped_time:10.6f}s] | Packet: {popped_packet['id']:<5} | Link: {u:^3} -> {v:^3} | Status: FINISHED")
+            queue.popleft()
 
         current_queue_length = len(queue)
         # M/M/1 delay calculations using packet['size']
