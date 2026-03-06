@@ -64,8 +64,8 @@ class MM1Infrastructure(Infrastructure):
         # M/M/1 delay calculations using packet['size']
         L = packet['size'] * 8
         R = edge_data.get("bandwidth", 10_000_000)
-        d_trans_teorico = L / R if R > 0 else 0.0
-        d_trans = random.expovariate(1.0 / d_trans_teorico) if d_trans_teorico > 0 else 0.0
+        d_trans_theoretical = L / R if R > 0 else 0.0
+        d_trans = random.expovariate(1.0 / d_trans_theoretical) if d_trans_theoretical > 0 else 0.0
 
         last_free_time = self.link_next_free_time[(u, v)]
         service_start_time = max(time_after_processing, last_free_time)
