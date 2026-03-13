@@ -12,29 +12,22 @@ class NetworkAwareApplication(Application):
         # Internal counter to give unique IDs to generated packets
         self._packet_counter = 0
 
-    def add_flow(self, source: str, target: str, packet_size_bytes: int,
-                 packets_per_tick: int, **kwargs):
+    def add_edge(self, u_of_edge: str, v_of_edge: str, packet_size_bytes: int = 1500,
+                    packets_per_tick: int = 1, **attr):
         """
-        Adds a directed logical link (flow) between two services.
-        Stores traffic parameters in the graph edge.
+        Overrides the default add_edge to automatically validate and inject
+        traffic parameters (packet size, rate, and throughput) for the logical flow.
         """
         if packet_size_bytes <= 0:
             raise ValueError(f"Packet size must be > 0. Found: {packet_size_bytes}")
         if packets_per_tick < 0:
             raise ValueError(f"Packet rate must be >= 0. Found: {packets_per_tick}")
-
         throughput_per_tick = packet_size_bytes * packets_per_tick
-
-        # We save the data in the graph (NetworkX edge attributes)
-        self.add_edge(
-            source,
-            target,
-            packet_size_bytes=packet_size_bytes,
-            packets_per_tick=packets_per_tick,
-            required_throughput_per_tick=throughput_per_tick,
-            **kwargs
-        )
-        print(f"Add edge flow {source}->{target}: {packets_per_tick} pkt/tick, size {packet_size_bytes}B")
+        attr['packet_size_bytes'] = packet_size_bytes
+        attr['packets_per_tick'] = packets_per_tick
+        attr['required_throughput_per_tick'] = throughput_per_tick
+        super().add_edge(u_of_edge, v_of_edge, **attr)
+        print(f"Added edge flow {u_of_edge}->{v_of_edge}: {packets_per_tick} pkt/tick, size {packet_size_bytes}B")
 
     def generate_traffic_for_tick(self, tick: int) -> list:
         """
