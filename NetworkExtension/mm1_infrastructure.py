@@ -15,19 +15,19 @@ class MM1Infrastructure(Infrastructure):
         self.routing_tables = defaultdict(dict)
         self.link_queues = defaultdict(deque)
 
-    def add_physical_link(self, u: str, v: str, bandwidth_mbps: float, length_km: float,
-                          propagation_speed_km_s: float = 200000.0,
-                          processing_delay_s: float = 0.0001, **kwargs):
-        bandwidth_bps = bandwidth_mbps * 1_000_000
-        self.add_edge(
-            u, v,
-            bandwidth=bandwidth_bps,
-            length_km=length_km,
-            propagation_speed_km_s=propagation_speed_km_s,
-            processing_delay_s=processing_delay_s,
-            latency=(length_km / propagation_speed_km_s) * 1000.0,
-            **kwargs
-        )
+    def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = 100.0, 
+                 length_km: float = 1.0, propagation_speed_km_s: float = 200000.0, 
+                 processing_delay_s: float = 0.0001, **attr):
+        """
+        Overrides the default add_edge to automatically calculate and inject
+        M/M/1 queuing parameters (bandwidth in bps, latency, propagation, processing).
+        """
+        attr['parameters'] = bandwidth_mbps * 1_000_000
+        attr['length_km'] = length_km
+        attr['propagation_speed_km_s'] = propagation_speed_km_s
+        attr['processing_delay_s'] = processing_delay_s
+        attr['latency'] = (length_km / propagation_speed_km_s) * 1000.0
+        super().add_edge(u_of_edge, v_of_edge, **attr)
 
     def calculate_mm1_delay(self, u: str, v: str, edge_data: dict, packet: dict, current_time: float) -> dict:
         """
