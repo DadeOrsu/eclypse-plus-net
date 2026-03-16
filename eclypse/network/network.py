@@ -7,7 +7,7 @@ from eclypse.graph import Infrastructure
 class Network(Infrastructure):
     """
     Extension of the Infrastructure model of ECLYPSE to simulate a network of
-    routers using M/M/1 queuing logic, with physical packet queuing.
+    routers using queuing logic, with physical packet queuing.
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -20,7 +20,7 @@ class Network(Infrastructure):
                  processing_delay_s: float = 0.0001, **attr):
         """
         Overrides the default add_edge to automatically calculate and inject
-        M/M/1 queuing parameters (bandwidth in bps, latency, propagation, processing).
+        queuing parameters (bandwidth in bps, latency, propagation, processing).
         """
         attr['parameters'] = bandwidth_mbps * 1_000_000
         attr['length_km'] = length_km
@@ -29,10 +29,10 @@ class Network(Infrastructure):
         attr['latency'] = (length_km / propagation_speed_km_s) * 1000.0
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
-    def calculate_mm1_delay(self, u: str, v: str, edge_data: dict, packet: dict, current_time: float) -> dict:
+    def delay(self, u: str, v: str, edge_data: dict, packet: dict, current_time: float) -> dict:
         """
         calculates the delay components for a single packet traversing a
-        specific link (u->v) based on M/M/1 queuing delay.
+        specific link (u->v).
 
         Args:
             u (str): The source node ID of the link.
@@ -61,7 +61,7 @@ class Network(Infrastructure):
             queue.popleft()
 
         current_queue_length = len(queue)
-        # M/M/1 delay calculations using packet['size']
+        # delay calculations using packet['size']
         L = packet['size'] * 8
         R = edge_data.get("bandwidth_mbps", 10_000_000)
         d_trans_theoretical = L / R if R > 0 else 0.0
@@ -134,7 +134,7 @@ class Network(Infrastructure):
                 return {"status": "DROPPED", "reason": f"Link fail {current_node}->{next_node} is down", "path": path_taken}
 
             edge_data = self.edges[current_node, next_node]
-            stats = self.calculate_mm1_delay(current_node, next_node, edge_data, packet, current_t)
+            stats = self.delay(current_node, next_node, edge_data, packet, current_t)
 
             if not stats:
                 return {"status": "FAILED", "reason": f"Link fail {current_node}->{next_node}"}
