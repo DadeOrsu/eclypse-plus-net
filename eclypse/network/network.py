@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 from eclypse.graph import Infrastructure
 
 
-class MM1Infrastructure(Infrastructure):
+class Network(Infrastructure):
     """
     Extension of the Infrastructure model of ECLYPSE to simulate a network of
     routers using M/M/1 queuing logic, with physical packet queuing.
