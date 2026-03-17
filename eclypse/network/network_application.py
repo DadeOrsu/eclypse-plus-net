@@ -1,4 +1,5 @@
 from eclypse.graph import Application
+from dataclasses import dataclass
 
 
 class NetworkAwareApplication(Application):
@@ -13,7 +14,7 @@ class NetworkAwareApplication(Application):
         self._packet_counter = 0
 
     def add_edge(self, u_of_edge: str, v_of_edge: str, packet_size_bytes: int = 1500,
-                    packets_per_tick: int = 1, **attr):
+                 packets_per_tick: int = 1, **attr):
         """
         Overrides the default add_edge to automatically validate and inject
         traffic parameters (packet size, rate, and throughput) for the logical flow.
@@ -55,13 +56,22 @@ class NetworkAwareApplication(Application):
             for _ in range(rate):
                 self._packet_counter += 1
 
-                packet = {
-                    "id": self._packet_counter,
-                    "src": u,   # Source (es. "Sensor")
-                    "dst": v,   # Destination (es. "Cloud")
-                    "size": size,
-                    "tick_created": tick
-                }
+                packet = Packet(
+                    id=self._packet_counter,
+                    src=u,
+                    dst=v,
+                    size=size,
+                    tick_created=tick
+                )
                 generated_packets.append(packet)
 
         return generated_packets
+
+
+@dataclass
+class Packet:
+    id: int
+    src: str
+    dst: str
+    size: int
+    tick_created: int

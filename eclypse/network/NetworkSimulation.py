@@ -1,4 +1,5 @@
 from eclypse.simulation.simulation import Simulation
+from network_application import Packet
 import pandas as pd
 
 
@@ -27,16 +28,15 @@ class NetworkSimulation(Simulation):
 
                     for packet in packets:
                         result = self.infrastructure.simulate_packet_routing(
-                            packet=packet,  
+                            packet=packet,
                             start_time=self.current_time_s
                         )
                         if result['status'] == 'DELIVERED':
                             self.network_results.append({
-                                "Tick": tick,
-                                "Packet_ID": packet['id'],
+                                "Packet_ID": packet.id,
                                 "App": app.name,
-                                "Src": packet['src'],
-                                "Dst": packet['dst'],
+                                "Src": packet.src,
+                                "Dst": packet.dst,
                                 "Start_Time": self.current_time_s,
                                 "End_Time": result['end_time'],
                                 "Total_Delay_ms": result['total_e2e_delay'] * 1000,

@@ -2,6 +2,7 @@ import networkx as nx
 import random
 from collections import defaultdict, deque
 from eclypse.graph import Infrastructure
+from network_application import Packet
 from constants import (
     MIN_BANDWIDTH,
     MIN_LENGTH_KM,
@@ -66,8 +67,8 @@ class Network(Infrastructure):
             queue.popleft()
 
         current_queue_length = len(queue)
-        # delay calculations using packet['size']
-        L = packet['size'] * 8
+        # delay calculations using packet.size
+        L = packet.size * 8
         R = edge_data.get("bandwidth_mbps", MIN_BANDWIDTH)
         d_trans_theoretical = L / R if R > 0 else 0.0
         d_trans = random.expovariate(1.0 / d_trans_theoretical) if d_trans_theoretical > 0 else 0.0
@@ -119,10 +120,10 @@ class Network(Infrastructure):
     def get_next_hop(self, current_node: str, final_dest: str):
         return self.routing_tables[current_node].get(final_dest)
 
-    def simulate_packet_routing(self, packet: dict, start_time: float):
+    def simulate_packet_routing(self, packet: Packet, start_time: float):
 
-        current_node = packet['src']
-        target = packet['dst']
+        current_node = packet.src
+        target = packet.dst
         current_t = start_time
         hop_details = []
         path_taken = [current_node]
