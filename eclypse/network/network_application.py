@@ -12,6 +12,7 @@ class NetworkAwareApplication(Application):
         super().__init__(*args, **kwargs)
         # Internal counter to give unique IDs to generated packets
         self._packet_counter = 0
+        self.generated_packets = []
 
     def add_edge(self, u_of_edge: str, v_of_edge: str, packet_size_bytes: int = 1500,
                  packets_per_tick: int = 1, **attr):
@@ -42,7 +43,7 @@ class NetworkAwareApplication(Application):
             list: A list of dictionaries, where each dict represents a packet
                   ready to be routed.
         """
-        generated_packets = []
+        self.generated_packets = []
 
         # Iterate over all edges (flows) defined in the application
         # self.edges(data=True) returns (source, target, attributes)
@@ -63,9 +64,7 @@ class NetworkAwareApplication(Application):
                     size=size,
                     tick_created=tick
                 )
-                generated_packets.append(packet)
-
-        return generated_packets
+                self.generated_packets.append(packet)
 
 
 @dataclass

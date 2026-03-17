@@ -24,9 +24,9 @@ class NetworkSimulation(Simulation):
         for tick in range(1, duration_ticks + 1):
             for app in apps:
                 if hasattr(app, "generate_traffic_for_tick"):
-                    packets = app.generate_traffic_for_tick(tick)
+                    app.generate_traffic_for_tick(tick)
 
-                    for packet in packets:
+                    for packet in app.generated_packets:
                         result = self.infrastructure.simulate_packet_routing(
                             packet=packet,
                             start_time=self.current_time_s
