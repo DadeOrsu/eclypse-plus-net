@@ -2,6 +2,18 @@ from eclypse.graph import Application
 from dataclasses import dataclass
 
 
+@dataclass
+class Packet:
+    """
+    Data class to represent a network packet with its attributes.
+    """
+    id: int
+    src: str
+    dst: str
+    size: int
+    tick_created: int
+
+
 class NetworkAwareApplication(Application):
     """
     Extension of the standard ECLYPSE application class that incorporates
@@ -65,12 +77,3 @@ class NetworkAwareApplication(Application):
                     tick_created=tick
                 )
                 self.generated_packets.append(packet)
-
-
-@dataclass
-class Packet:
-    id: int
-    src: str
-    dst: str
-    size: int
-    tick_created: int
