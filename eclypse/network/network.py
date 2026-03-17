@@ -2,6 +2,11 @@ import networkx as nx
 import random
 from collections import defaultdict, deque
 from eclypse.graph import Infrastructure
+from constants import (
+    MIN_BANDWIDTH,
+    MIN_LENGTH_KM,
+    MIN_PROPAGATION_SPEED
+)
 
 
 class Network(Infrastructure):
@@ -63,7 +68,7 @@ class Network(Infrastructure):
         current_queue_length = len(queue)
         # delay calculations using packet['size']
         L = packet['size'] * 8
-        R = edge_data.get("bandwidth_mbps", 10_000_000)
+        R = edge_data.get("bandwidth_mbps", MIN_BANDWIDTH)
         d_trans_theoretical = L / R if R > 0 else 0.0
         d_trans = random.expovariate(1.0 / d_trans_theoretical) if d_trans_theoretical > 0 else 0.0
 
@@ -76,8 +81,8 @@ class Network(Infrastructure):
 
         # Insert the packet into the queue with its expected finish time
         queue.append((service_finish_time, packet))
-        d = edge_data.get("length_km", 0.0)
-        s = edge_data.get("propagation_speed_km_s", 200000.0)
+        d = edge_data.get("length_km", MIN_LENGTH_KM)
+        s = edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
         d_prop = d / s if s > 0 else 0.0
 
         total_delay = d_proc + d_queue + d_trans + d_prop
