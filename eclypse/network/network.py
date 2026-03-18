@@ -3,11 +3,45 @@ import random
 from collections import defaultdict, deque
 from eclypse.graph import Infrastructure
 from network_application import Packet
+from typing import List
+from dataclasses import dataclass, field
 from constants import (
     MIN_BANDWIDTH,
     MIN_LENGTH_KM,
     MIN_PROPAGATION_SPEED
 )
+
+
+@dataclass
+class DelayMetrics:
+    processing_delay: float
+    queue_delay: float
+    transmission_delay: float
+    propagation_delay: float
+    total_delay: float
+    finish_time: float
+    queue_length_packets: int
+
+
+@dataclass
+class HopInfo:
+    hop: str
+    processing_ms: float
+    queue_ms: float
+    transmission_ms: float
+    propagation_ms: float
+    queue_length: int
+    arrival_at_next: float
+
+
+@dataclass
+class RoutingResult:
+    status: str
+    reason: str = ""
+    path: List[str] = field(default_factory=list)
+    end_time: float = 0.0
+    total_e2e_delay: float = 0.0
+    hops: List[HopInfo] = field(default_factory=list) 
 
 
 class Network(Infrastructure):
@@ -88,15 +122,15 @@ class Network(Infrastructure):
 
         total_delay = d_proc + d_queue + d_trans + d_prop
 
-        return {
-            "processing_delay": d_proc,
-            "queue_delay": d_queue,
-            "transmission_delay": d_trans,
-            "propagation_delay": d_prop,
-            "total_delay": total_delay,
-            "finish_time": service_finish_time + d_prop,
-            "queue_length_packets": current_queue_length
-        }
+        return DelayMetrics(
+            processing_delay=d_proc,
+            queue_delay=d_queue,
+            transmission_delay=d_trans,
+            propagation_delay=d_prop,
+            total_delay=total_delay,
+            finish_time=service_finish_time + d_prop,
+            queue_length_packets=current_queue_length
+        )
 
     def install_shortest_path_routes(self):
         """
@@ -145,27 +179,28 @@ class Network(Infrastructure):
             if not stats:
                 return {"status": "FAILED", "reason": f"Link fail {current_node}->{next_node}"}
 
-            hop_details.append({
-                "hop": f"{current_node}->{next_node}",
-                "processing_ms": stats['processing_delay'] * 1000.0,
-                "queue_ms": stats['queue_delay'] * 1000.0,
-                "transmission_ms": stats['transmission_delay'] * 1000.0,
-                "propagation_ms": stats['propagation_delay'] * 1000.0,
-                "queue_length": stats['queue_length_packets'],
-                "arrival_at_next": stats['finish_time']
-            })
+            hop = HopInfo(
+                hop=f"{current_node}->{next_node}",
+                processing_ms=stats.processing_delay * 1000.0,
+                queue_ms=stats.queue_delay * 1000.0,
+                transmission_ms=stats.transmission_delay * 1000.0,
+                propagation_ms=stats.propagation_delay * 1000.0,
+                queue_length=stats.queue_length_packets,
+                arrival_at_next=stats.finish_time
+            )
+            hop_details.append(hop)
 
-            current_t = stats['finish_time']
+            current_t = stats.finish_time
             current_node = next_node
             path_taken.append(current_node)
 
-        return {
-            "status": "DELIVERED",
-            "path": path_taken,
-            "end_time": current_t,
-            "total_e2e_delay": current_t - start_time,
-            "hops": hop_details
-        }
+        return RoutingResult(
+            status="DELIVERED",
+            path=path_taken,
+            end_time=current_t,
+            total_e2e_delay=current_t - start_time,
+            hops=hop_details
+        )
 
     def remove_node(self, n: str):
         "simulates a node failure of a node and the consequent OSPF recalculation."

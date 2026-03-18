@@ -1,7 +1,6 @@
 from eclypse.simulation.simulation import Simulation
-from network_application import Packet
 import pandas as pd
-
+from dataclasses import asdict
 
 class NetworkSimulation(Simulation):
 
@@ -31,17 +30,19 @@ class NetworkSimulation(Simulation):
                             packet=packet,
                             start_time=self.current_time_s
                         )
-                        if result['status'] == 'DELIVERED':
+                        if result.status == 'DELIVERED':
+                            hops_dicts = [asdict(hop) for hop in result.hops]
                             self.network_results.append({
+                                "Tick": tick,
                                 "Packet_ID": packet.id,
                                 "App": app.name,
                                 "Src": packet.src,
                                 "Dst": packet.dst,
                                 "Start_Time": self.current_time_s,
-                                "End_Time": result['end_time'],
-                                "Total_Delay_ms": result['total_e2e_delay'] * 1000,
-                                "Hops_Count": len(result['path']) - 1,
-                                "Hops_Details": result['hops']
+                                "End_Time": result.end_time,
+                                "Total_Delay_ms": result.total_e2e_delay * 1000,
+                                "Hops_Count": len(result.path) - 1,
+                                "Hops_Details": hops_dicts
                             })
 
             self.current_time_s += tick_duration_s
