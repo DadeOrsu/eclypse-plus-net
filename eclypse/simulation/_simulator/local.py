@@ -10,13 +10,14 @@ from __future__ import annotations
 import asyncio
 import os
 import random as rnd
-import time
-from datetime import timedelta
 from enum import (
     Enum,
     auto,
 )
-from threading import Thread
+from threading import (
+    Event,
+    Thread,
+)
 from typing import (
     TYPE_CHECKING,
     Dict,
@@ -32,7 +33,6 @@ from eclypse.utils.constants import (
     FLOAT_EPSILON,
     RND_SEED,
 )
-from eclypse.workflow.trigger.trigger import ScheduledTrigger
 
 from .reporter import SimulationReporter
 
@@ -83,9 +83,18 @@ class Simulator:
         # Simulation state
         self._event_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
         self._events_queue: asyncio.Queue = asyncio.Queue()
+        self._ordered_events = tuple(
+            sorted(
+                self._events.values(),
+                key=lambda event: not event.is_callback,
+            )
+        )
 
         self.thread: Thread = Thread(target=_run_loop, args=(self,), daemon=True)
         self._status: SimulationState = SimulationState.IDLE
+        self._finished: Event = Event()
+        self._finished.set()
+        self._stop_requested = False
 
         # Reporting
         self._reporter: SimulationReporter = SimulationReporter(
@@ -117,11 +126,17 @@ class Simulator:
         Args:
             **kwargs: The additional arguments to pass to the start event.
         """
+        self._finished.clear()
+        self._stop_requested = False
         self._status = SimulationState.RUNNING
         self.thread.start()
 
     def stop(self):
         """Stop the simulation."""
+        if self._status == SimulationState.IDLE or self._stop_requested:
+            return
+
+        self._stop_requested = True
         asyncio.run_coroutine_threadsafe(self.enqueue_event("stop"), self._event_loop)
 
     async def enqueue_event(self, event_name: str, triggered_by: Optional[str] = None):
@@ -146,11 +161,7 @@ class Simulator:
             self._status = SimulationState.STOPPING
 
         if not self._events[event_name].is_callback:
-            sorted_events = sorted(
-                self._events.values(),
-                key=lambda e: not e.is_callback,
-            )
-            for curr_evt in sorted_events:
+            for curr_evt in self._ordered_events:
                 if curr_evt.name != event_name and curr_evt._trigger(
                     self._events[event_name]
                 ):
@@ -158,33 +169,40 @@ class Simulator:
 
     async def run(self):
         """Run the simulation."""
-        await self._reporter.start(self._event_loop)
-        await self.enqueue_event("start")
+        try:
+            await self._reporter.start(self._event_loop)
+            await self.enqueue_event("start")
 
-        # Run the simulation
-        while self.status == SimulationState.RUNNING or (
-            self.status == SimulationState.STOPPING and not self._events_queue.empty()
-        ):
-            try:
-                if self.status == SimulationState.RUNNING:
-                    for event in self._events.values():
-                        # Checks periodic or scheduled triggers
-                        if event._trigger():
-                            await self.enqueue_event(event.name)
+            # Run the simulation
+            while self.status == SimulationState.RUNNING or (
+                self.status == SimulationState.STOPPING
+                and not self._events_queue.empty()
+            ):
+                try:
+                    if self.status == SimulationState.RUNNING:
+                        for event in self._events.values():
+                            # Checks periodic or scheduled triggers
+                            if event._trigger():
+                                await self.enqueue_event(event.name)
 
-                event_meta = self._events_queue.get_nowait()
-                await self.fire(**event_meta)
-            except asyncio.QueueEmpty:
-                pass
-            except Exception as e:
-                print_exception(e, self.__class__.__name__)
-                if self.status != SimulationState.STOPPING:
-                    await self.enqueue_event("stop")
-            finally:
-                await asyncio.sleep(FLOAT_EPSILON)
-
-        await self._reporter.stop()
-        self._status = SimulationState.IDLE
+                    if self.status == SimulationState.STOPPING:
+                        event_meta = self._events_queue.get_nowait()
+                    else:
+                        event_meta = await asyncio.wait_for(
+                            self._events_queue.get(),
+                            timeout=FLOAT_EPSILON,
+                        )
+                    await self.fire(**event_meta)
+                except (asyncio.QueueEmpty, TimeoutError):
+                    pass
+                except Exception as e:
+                    print_exception(e, self.__class__.__name__)
+                    if self.status != SimulationState.STOPPING:
+                        await self.enqueue_event("stop")
+                finally:
+                    await asyncio.sleep(FLOAT_EPSILON)
+        finally:
+            await self._finalize_shutdown()
 
     async def fire(
         self,
@@ -209,17 +227,16 @@ class Simulator:
             timeout (Optional[float], optional): The maximum time to wait for the
                 simulation to finish. Defaults to None, meaning indefinite wait.
         """
-        if timeout:
-            stop_event = self._events["stop"]
-            trigger = ScheduledTrigger(timedelta(seconds=timeout))
-            trigger.init()
-            stop_event.triggers.append(trigger)
-        t0 = time.time()
+        self._finished.wait(timeout=timeout)
 
-        while self._status != SimulationState.IDLE and (
-            timeout is None or time.time() - t0 < timeout
-        ):
-            time.sleep(FLOAT_EPSILON)
+    async def _finalize_shutdown(self):
+        """Ensure all background work is flushed and the completion state is signalled."""
+        try:
+            await self._reporter.stop()
+        finally:
+            self._status = SimulationState.IDLE
+            self._stop_requested = False
+            self._finished.set()
 
     def register(
         self,

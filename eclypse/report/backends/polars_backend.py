@@ -13,7 +13,12 @@ from typing import (
     Set,
 )
 
-from eclypse.report.backend import FrameBackend
+from eclypse.report.backend import (
+    FrameBackend,
+    get_report_source,
+    list_parquet_parts,
+    load_jsonl_rows,
+)
 
 if TYPE_CHECKING:
     from polars import DataFrame
@@ -32,20 +37,19 @@ class PolarsBackend(FrameBackend):
 
         self._pl = pl
 
-    def read_csv(self, path: str) -> DataFrame:
-        """Read a CSV file into a polars DataFrame.
-
-        The `value` column is cast to Float64 with `strict=False`, so non-parsable
-        values become null rather than raising.
-
-        Args:
-            path: Path to the CSV file.
-
-        Returns:
-            A polars DataFrame.
-        """
+    def read_frame(self, stats_path, report_type: str, report_format: str) -> DataFrame:
+        """Read a report into a polars DataFrame."""
         pl = self._pl
-        df = pl.read_csv(path)
+        source = get_report_source(stats_path, report_type, report_format)
+
+        if report_format == "csv":
+            df = pl.read_csv(source)
+        elif report_format == "parquet":
+            df = pl.read_parquet([str(part) for part in list_parquet_parts(source)])
+        elif report_format == "json":
+            df = pl.DataFrame(load_jsonl_rows(source, report_type))
+        else:
+            raise ValueError(f"Unsupported report format: {report_format}")
 
         if "value" in df.columns:
             df = df.with_columns(
@@ -104,6 +108,16 @@ class PolarsBackend(FrameBackend):
         """
         pl = self._pl
         return df.filter(pl.col(col).is_in(list(events)))
+
+    def filter_range_step(
+        self, df: DataFrame, col: str, start: int, stop: int, step: int
+    ) -> DataFrame:
+        """Filter rows where `col` is within a range and matches the given step."""
+        pl = self._pl
+        expr = (pl.col(col) >= start) & (pl.col(col) <= stop)
+        if step > 1:
+            expr = expr & (((pl.col(col) - start) % step) == 0)
+        return df.filter(expr)
 
     def filter_eq(self, df: DataFrame, col: str, value: Any) -> DataFrame:
         """Filter rows where `col` equals `value`.

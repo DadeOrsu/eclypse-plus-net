@@ -37,12 +37,15 @@ from eclypse.utils._logging import (
     logger,
 )
 from eclypse.utils.constants import (
-    DEFAULT_REPORT_BACKEND,
-    DEFAULT_SIM_PATH,
     DRIVING_EVENT,
     LOG_FILE,
     LOG_LEVEL,
     RND_SEED,
+)
+from eclypse.utils.defaults import (
+    DEFAULT_REPORT_BACKEND,
+    DEFAULT_REPORT_TYPE,
+    get_default_sim_path,
 )
 from eclypse.workflow.event.defaults import get_default_events
 from eclypse.workflow.trigger import (
@@ -56,7 +59,6 @@ if TYPE_CHECKING:
         FrameBackend,
         Reporter,
     )
-    from eclypse.utils._logging import Logger
     from eclypse.utils.types import LogLevel
     from eclypse.workflow.event import EclypseEvent
 
@@ -67,7 +69,7 @@ class SimulationConfig(dict):
     It is a dictionary-like class that stores the configuration of a simulation.
     """
 
-    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments  # noqa: C901
         self,
         step_every_ms: Optional[Union[Literal["manual", "auto"], float]] = "manual",
         timeout: Optional[float] = None,
@@ -79,7 +81,8 @@ class SimulationConfig(dict):
         path: Optional[str] = None,
         log_to_file: bool = False,
         log_level: LogLevel = "ECLYPSE",
-        report_chunk_size: int = 1,
+        report_chunk_size: int = 100,
+        report_format: Optional[Literal["csv", "parquet", "json"]] = None,
         report_backend: Optional[
             Union[Literal["pandas", "polars", "polars_lazy"], FrameBackend]
         ] = None,
@@ -109,6 +112,9 @@ class SimulationConfig(dict):
             log_level (LogLevel, optional): The log level. Defaults to "ECLYPSE".
             report_chunk_size (int, optional): The size of the chunks in which the report will \
                 be generated. Defaults to 1 (each event reported immediately).
+            report_format (Literal["csv", "parquet", "json"], optional):
+                The storage format used for callback reports. Defaults to
+                DEFAULT_REPORT_TYPE.
             report_backend (Union[str, FrameBackend], optional):
                 The name or the class of the backend used to generate the report. Defaults to None.
             remote (Union[bool, RemoteBootstrap], optional): Whether the simulation is local \
@@ -119,6 +125,12 @@ class SimulationConfig(dict):
         _events = events if events is not None else []
         _events.extend(get_default_events(_events))
         _events.extend(get_default_metrics() if include_default_metrics else [])
+        _report_format = (
+            report_format if report_format is not None else DEFAULT_REPORT_TYPE
+        )
+        for event in _events:
+            if event.is_callback and event.report_types == [DEFAULT_REPORT_TYPE]:
+                event._report = [_report_format]
 
         # Reporters
         _reporters = None
@@ -132,6 +144,8 @@ class SimulationConfig(dict):
 
         if "tensorboard" in _reporters:
             _require_module("tensorboard", extras_name="tboard")
+        if "parquet" in _reporters:
+            _require_module("polars")
 
         # Remote support
         if remote:
@@ -157,7 +171,7 @@ class SimulationConfig(dict):
             raise ValueError("step_every_ms must be a float, 'manual', 'auto' or None.")
 
         # Simulation path
-        _path = DEFAULT_SIM_PATH if path is None else Path(path)
+        _path = get_default_sim_path() if path is None else Path(path)
         if _path.exists():
             _path = Path(f"{_path}-{strftime('%Y%m%d_%H%M%S')}")
 
@@ -172,6 +186,7 @@ class SimulationConfig(dict):
             log_to_file=log_to_file,
             log_level=log_level,
             report_chunk_size=report_chunk_size,
+            report_format=_report_format,
             report_backend=_report_backend,
             remote=remote,
         )
@@ -346,6 +361,11 @@ class SimulationConfig(dict):
         return self["report_chunk_size"]
 
     @property
+    def report_format(self) -> Literal["csv", "parquet", "json"]:
+        """Returns the storage format used for report files."""
+        return self["report_format"]
+
+    @property
     def report_backend(self) -> Optional[Literal["pandas", "polars", "polars_lazy"]]:
         """Returns the name of the backend used to generate the report.
 
@@ -364,7 +384,7 @@ class SimulationConfig(dict):
         return self["remote"]
 
     @property
-    def logger(self) -> Logger:
+    def logger(self) -> Any:
         """Returns the logger configuration for the simulation.
 
         Returns:

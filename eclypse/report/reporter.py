@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
+    Generator,
     List,
     Union,
 )
@@ -44,6 +45,10 @@ class Reporter(ABC):
         """Perform any preparation logic (file creation, folder setup, headers, etc)."""
         self.report_path.mkdir(parents=True, exist_ok=True)
 
+    async def close(self):
+        """Perform any shutdown logic (closing file handles, flushing state, etc)."""
+        return None
+
     @abstractmethod
     async def write(self, callback_type: str, data: Any):
         """Write a batch of buffered data to the destination (file, db, etc)."""
@@ -54,7 +59,7 @@ class Reporter(ABC):
         event_name: str,
         event_idx: int,
         callback: EclypseEvent,
-    ) -> List[Any]:
+    ) -> Generator[Any, None, None]:
         """Report the simulation reportable callbacks.
 
         Args:
@@ -63,10 +68,10 @@ class Reporter(ABC):
             callback (EclypseEvent): The executed event.
 
         Returns:
-            List[Any]: The list of entries to be written.
+            Generator[Any, None, None]: The entries to be written lazily.
         """
 
-    def dfs_data(self, data: Any) -> List:
+    def dfs_data(self, data: Any) -> Generator[List[Any], None, None]:
         """Perform DFS on the nested dictionary and build paths (concatenated keys) as strings.
 
         Args:
@@ -87,5 +92,13 @@ class Reporter(ABC):
             else:
                 yield [d]
 
-        # Start the DFS from the root of the dictionary
-        return list(dfs(data))
+        yield from dfs(data)
+
+    def callback_rows(self, callback: EclypseEvent) -> Generator[List[Any], None, None]:
+        """Return callback tuple rows directly, otherwise DFS-flatten the payload."""
+        if callback.is_callback and isinstance(callback.data, tuple):
+            for row in callback.data:
+                yield list(row)
+            return
+
+        yield from self.dfs_data(callback.data)

@@ -13,10 +13,15 @@ from typing import (
     Set,
 )
 
-from eclypse.report.backend import FrameBackend
+from eclypse.report.backend import (
+    FrameBackend,
+    get_report_source,
+    list_parquet_parts,
+    load_jsonl_rows,
+)
 
 if TYPE_CHECKING:
-    from pandas import DataFrame
+    from pandas import DataFrame  # type: ignore[import-untyped]
 
 
 def _to_float(value: Any) -> Any:
@@ -47,16 +52,23 @@ class PandasBackend(FrameBackend):
 
         self._pd = pd
 
-    def read_csv(self, path: str) -> DataFrame:
-        """Read a CSV file into a pandas DataFrame.
+    def read_frame(self, stats_path, report_type: str, report_format: str) -> DataFrame:
+        """Read a report into a pandas DataFrame."""
+        source = get_report_source(stats_path, report_type, report_format)
 
-        Args:
-            path: Path to the CSV file.
+        if report_format == "csv":
+            return self._pd.read_csv(source, converters={"value": _to_float})
 
-        Returns:
-            A pandas DataFrame with the `value` column converted via `_to_float`.
-        """
-        return self._pd.read_csv(path, converters={"value": _to_float})
+        if report_format == "parquet":
+            return self._pd.concat(
+                [self._pd.read_parquet(part) for part in list_parquet_parts(source)],
+                ignore_index=True,
+            )
+
+        if report_format == "json":
+            return self._pd.DataFrame(load_jsonl_rows(source, report_type))
+
+        raise ValueError(f"Unsupported report format: {report_format}")
 
     def is_empty(self, df: DataFrame) -> bool:
         """Return whether the DataFrame is empty.
@@ -106,6 +118,16 @@ class PandasBackend(FrameBackend):
             A filtered DataFrame.
         """
         return df[df[col].isin(list(events))]
+
+    def filter_range_step(
+        self, df: DataFrame, col: str, start: int, stop: int, step: int
+    ) -> DataFrame:
+        """Filter rows where `col` is within a range and matches the given step."""
+        series = df[col]
+        mask = (series >= start) & (series <= stop)
+        if step > 1:
+            mask &= ((series - start) % step) == 0
+        return df[mask]
 
     def filter_eq(self, df: DataFrame, col: str, value: Any) -> DataFrame:
         """Filter rows where `col` equals `value`.
