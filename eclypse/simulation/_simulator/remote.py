@@ -1,5 +1,4 @@
 # mypy: disable-error-code="override"
-# pylint: disable=protected-access
 """Module for the RemoteSimulator class.
 
 It operates like the local simulator, but performs the simulation using ray actors.
@@ -14,10 +13,6 @@ costs of such interactions.
 from __future__ import annotations
 
 import asyncio
-from typing import (
-    List,
-    Optional,
-)
 
 from eclypse.remote.communication.route import Route
 from eclypse.utils._logging import config_logger
@@ -43,21 +38,21 @@ class RemoteSimulator(Simulator):
     def enact(self):
         """Enacts the placements within the remote infrastructure."""
         for p in self._manager.placements.values():
-            if p._to_reset and p._deployed:
+            if p.reset_requested and p.deployed:
                 RemoteSimOpsHandler.stop(p)
                 RemoteSimOpsHandler.undeploy(p)
-            elif not p._to_reset and p.mapping and not p._deployed:
+            elif not p.reset_requested and p.mapping and not p.deployed:
                 RemoteSimOpsHandler.deploy(p)
                 RemoteSimOpsHandler.start(p)
 
         super().enact()
 
-    async def wait(self, timeout: Optional[float] = None):
+    async def wait(self, timeout: float | None = None):
         # pylint: disable=invalid-overridden-method
         """Wait for the simulation to finish.
 
         Args:
-            timeout (Optional[float]): The maximum time to wait for the simulation to
+            timeout (float | None): The maximum time to wait for the simulation to
                 finish. If None, it waits indefinitely. Defaults to None.
         """
         await asyncio.to_thread(super().wait, timeout)
@@ -65,7 +60,7 @@ class RemoteSimulator(Simulator):
     def cleanup(self):
         """Cleans up the emulation status by stopping and undeploying all placements."""
         for p in self.placements.values():
-            if p._deployed:
+            if p.deployed:
                 RemoteSimOpsHandler.stop(p)
                 RemoteSimOpsHandler.undeploy(p)
 
@@ -81,7 +76,7 @@ class RemoteSimulator(Simulator):
         application_id: str,
         source_id: str,
         dest_id: str,
-    ) -> Optional[Route]:
+    ) -> Route | None:
         """Computes the route between two logically neighbor services.
 
         If the services are not logically neighbors, it returns None.
@@ -123,7 +118,7 @@ class RemoteSimulator(Simulator):
             hops=path,
         )
 
-    async def get_neighbors(self, application_id: str, service_id: str) -> List[str]:
+    async def get_neighbors(self, application_id: str, service_id: str) -> list[str]:
         """Returns the logical neighbors of a service in an application.
 
         Args:
@@ -131,7 +126,7 @@ class RemoteSimulator(Simulator):
             service_id (str): The ID of the service for which to retrieve the neighbors.
 
         Returns:
-            List[str]: A list of service IDs.
+            list[str]: A list of service IDs.
         """
         application = self._manager.get(application_id).application
         neighbors = list(application.neighbors(service_id))

@@ -6,14 +6,14 @@ defined in terms of a set of constraints:
 
 - `aggregate`: Aggregate the assets into a single asset via intersection.
 - `satisfies`: Check if all the elements in the constraint are present in the asset.
-- `is_consistent`: Check if the asset belongs to the interval [lower_bound, upper_bound].
+- `is_consistent`: Check if the asset belongs to the interval
+  [lower_bound, upper_bound].
 """
 
 from __future__ import annotations
 
 from typing import (
     Any,
-    Set,
 )
 
 from .asset import Asset
@@ -36,7 +36,7 @@ class Symbolic(Asset):
         """
         # return list(set().union(*assets))
 
-        uniques: Set[Any] = set()
+        uniques: set[Any] = set()
         for asset in assets:
             _asset = [asset] if isinstance(asset, str) else asset
             uniques.update(_asset)

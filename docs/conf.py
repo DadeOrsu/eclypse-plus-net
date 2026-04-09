@@ -6,7 +6,6 @@ import os
 import sys
 from datetime import datetime
 from importlib import import_module
-from importlib.metadata import distribution
 
 from jinja2.filters import FILTERS
 
@@ -22,14 +21,13 @@ sys.path.insert(0, os.path.abspath(".."))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 project = "ECLYPSE"
-author = "Valerio De Caro & Jacopo Massa"
+author = "Jacopo Massa & Valerio De Caro"
 copyright = f"{(datetime.now().year)}, {author}"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    # "enum_tools.autoenum",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
@@ -46,10 +44,11 @@ extensions = [
 ]
 viewcode_follow_imported_members = True
 autosummary_generate = True
+autosectionlabel_prefix_document = True
 myst_enable_extensions = ["colon_fence"]
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "README.md"]
 
 coverage_show_missing_items = True
 # Automatically extract typehints when specified and place them in
@@ -69,8 +68,7 @@ html_logo = "_static/images/light.png"
 
 html_static_path = ["_static"]
 html_extra_path = ["_static/landing"]
-html_css_files = ["css/home.css"]  # ["css/custom.css", "css/landing.css"]
-html_js_files = ["js/custom.js"]
+html_css_files = ["css/custom.css", "css/home.css"]
 
 html_context = {
     "github_url": "https://github.com",
@@ -81,13 +79,6 @@ html_context = {
 }
 
 html_additional_pages = {"index": "index.html"}
-
-# external_links = [
-#     {
-#         "name": "Changelog",
-#         "url": "https://github.com/eclypse-org/eclypse/blob/main/CHANGELOG.md",
-#     }
-# ]
 
 favicons = [
     {
@@ -132,7 +123,7 @@ icon_links = [
         "url": "https://github.com/eclypse-org/eclypse",
         "icon": "fa-brands fa-github",
         "type": "fontawesome",
-    }
+    },
 ]
 
 html_theme_options = {
@@ -148,7 +139,6 @@ html_theme_options = {
     "show_nav_level": 1,
     "navigation_depth": 4,
     "icon_links": icon_links,
-    # "external_links": external_links,
     "header_links_before_dropdown": 4,
     "logo": {
         "text": "ECLYPSE",
@@ -161,6 +151,37 @@ source_suffix = [".rst", ".pyi"]
 html_sidebars = {"**": ["sidebar-nav-bs", "sidebar-ethical-ads"]}
 
 html_scaled_image_link = False
+
+
+def patch_autosummary_name_collisions():
+    """Resolve package-level name collisions for autosummary generation.
+
+    The ``eclypse.workflow.event`` package re-exports the ``event`` decorator,
+    which shadows the ``event`` submodule when autosummary resolves dotted
+    names. During the docs build we point the package attribute to the submodule
+    so the generated module page documents ``eclypse.workflow.event.event``
+    rather than the decorator function. The decorator remains documented through
+    ``eclypse.workflow.event.decorator``.
+
+    Recent autosummary releases also expect package-level attributes for
+    relative submodule entries such as ``simulation`` under ``eclypse`` and
+    ``defaults`` under ``eclypse.report.metrics``. We expose those submodules
+    explicitly during the docs build so the generated package pages keep using
+    the concise autosummary syntax already present in the source tree.
+    """
+
+    root_pkg = import_module("eclypse")
+    root_pkg.simulation = import_module("eclypse.simulation")
+
+    metrics_pkg = import_module("eclypse.report.metrics")
+    metrics_pkg.defaults = import_module("eclypse.report.metrics.defaults")
+
+    event_pkg = import_module("eclypse.workflow.event")
+    event_pkg.decorator_event = event_pkg.event
+    event_pkg.event = import_module("eclypse.workflow.event.event")
+
+
+patch_autosummary_name_collisions()
 
 
 def filter_out_undoc_class_members(member_name, class_name, module_name):

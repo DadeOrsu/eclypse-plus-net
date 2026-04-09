@@ -14,14 +14,6 @@ from itertools import product
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Dict,
-    Generator,
-    List,
-    Literal,
-    Optional,
-    Tuple,
-    Union,
 )
 
 from eclypse.remote import ray_backend
@@ -29,7 +21,14 @@ from eclypse.utils._logging import logger
 from eclypse.utils.constants import MAX_FLOAT
 from eclypse.workflow.trigger.bucket import TriggerBucket
 
+from .role import EventRole
+
 if TYPE_CHECKING:
+    from collections.abc import (
+        Callable,
+        Generator,
+    )
+
     from ray.actor import ActorHandle
 
     from eclypse.graph import Infrastructure
@@ -38,7 +37,10 @@ if TYPE_CHECKING:
         PlacementView,
     )
     from eclypse.simulation._simulator.local import Simulator
-    from eclypse.utils.types import EventType
+    from eclypse.utils.types import (
+        EventType,
+        TriggerCondition,
+    )
     from eclypse.workflow.trigger import Trigger
 
 
@@ -48,12 +50,12 @@ class EclypseEvent:
     def __init__(
         self,
         name: str,
-        event_type: Optional[EventType] = None,
-        triggers: Optional[List[Trigger]] = None,
-        trigger_condition: Literal["any", "all"] = "any",
+        event_type: EventType | None = None,
+        triggers: list[Trigger] | None = None,
+        trigger_condition: TriggerCondition = "any",
         max_triggers: int = int(MAX_FLOAT),
-        is_callback: bool = False,
-        report: Optional[Union[str, List[str]]] = None,
+        role: EventRole = EventRole.EVENT,
+        report: str | list[str] | None = None,
         remote: bool = False,
         verbose: bool = False,
     ):
@@ -62,18 +64,19 @@ class EclypseEvent:
         Args:
             name (str): The name of the event.
             event_type (EventType): The type of the event. Defaults to None.
-            triggers (Optional[List[Trigger]]): A list of triggers that can trigger the
+            triggers (list[Trigger] | None): A list of triggers that can trigger the
                 event. Defaults to None.
-            trigger_condition (Optional[str]): The condition for the triggers to fire the
+            trigger_condition (str | None): The condition for the triggers to fire the
                 event. If "any", the event fires if any trigger is active. If "all",
                 the event fires only if all triggers are active. Defaults to "any".
-            max_triggers (Optional[int]): The maximum number of times the trigger can be
+            max_triggers (int | None): The maximum number of times the trigger can be
                 called. Defaults to no limit (MAX_FLOAT).
-            is_callback (bool): If True, the event is a callback and will be executed
-                right after the event that triggered it. Defaults to False.
-            report (Optional[Union[str, List[str]]]): The type of report to generate for
+            role (EventRole): The role of the event in the workflow.
+                Defaults to EventRole.EVENT.
+            report (str | list[str] | None): The type of report to generate for
                 the event. Defaults to DEFAULT_REPORT_TYPE.
-            remote (bool): If True, the event will be executed remotely. Defaults to False.
+            remote (bool): If True, the event will be executed remotely.
+                Defaults to False.
             verbose (bool): If True, the event will log its firing. Defaults to False.
 
         Raises:
@@ -90,12 +93,12 @@ class EclypseEvent:
         )
         self.trigger_bucket.event = self
 
-        self.is_callback = is_callback
+        self._role = role
         self.type = event_type
         self._remote = remote
         self._verbose = verbose
 
-        self._simulator: Optional[Simulator] = None
+        self._simulator: Simulator | None = None
         self._data: Any = {}
 
         if report:
@@ -114,20 +117,21 @@ class EclypseEvent:
             NotImplementedError: The event logic is not implemented.
         """
         raise NotImplementedError(
-            "The event logic must be implemented in two ways: 1. decorate a function or",
+            "The event logic must be implemented in two ways: 1. decorate "
+            "a function or",
             "a class with a __call__ method; 2. subclass the EclypseEvent class and",
             "implement the __call__ method.",
         )
 
-    def _call_by_type(self, trigger_event: Optional[EclypseEvent]):
+    def _call_by_type(self, trigger_event: EclypseEvent | None) -> Any:
         """Execute the event function according to the type of the event.
 
         Args:
-            trigger_event (Optional[EclypseEvent]): The event that triggered this event.\
+            trigger_event (EclypseEvent | None): The event that triggered this event.\
                 Defaults to None.
 
         Returns:
-            Any: The value returned by the event function, which must be a dict or None.
+            Any: The event payload.
         """
         result_fn = None
         event, sim = trigger_event, self.simulator
@@ -145,7 +149,7 @@ class EclypseEvent:
                 self.__call__,
                 placements,
                 infr,
-                flatten=self.is_callback,
+                flatten=self.is_post_event,
                 **event_data,
             )
 
@@ -155,26 +159,26 @@ class EclypseEvent:
                     self.__call__,
                     placements,
                     infr,
-                    flatten=self.is_callback,
+                    flatten=self.is_post_event,
                     **event_data,
                 )
             else:
-                self._simulator = None
+                self.detach_simulator()
                 result_fn = _remote_service_fn(
                     self.__call__,
                     placements,
                     infr,
-                    flatten=self.is_callback,
+                    flatten=self.is_post_event,
                     **event_data,
                 )
-                self._simulator = sim
+                self.attach_simulator(sim)
 
         if self.type == "interaction":
             result_fn = _interaction_fn(
                 self.__call__,
                 placements,
                 infr,
-                flatten=self.is_callback,
+                flatten=self.is_post_event,
                 **event_data,
             )
 
@@ -187,7 +191,7 @@ class EclypseEvent:
                 placements,
                 infr,
                 pv,
-                flatten=self.is_callback,
+                flatten=self.is_post_event,
                 **event_data,
             )
 
@@ -197,13 +201,13 @@ class EclypseEvent:
                 placements,
                 infr,
                 pv,
-                flatten=self.is_callback,
+                flatten=self.is_post_event,
                 **event_data,
             )
 
         return result_fn
 
-    def _trigger(self, trigger_event: Optional[EclypseEvent] = None) -> bool:
+    def _trigger(self, trigger_event: EclypseEvent | None = None) -> bool:
         """Trigger the event, if possible.
 
         Returns:
@@ -216,11 +220,11 @@ class EclypseEvent:
             )
         return condition
 
-    def _fire(self, trigger_event: Optional[EclypseEvent] = None) -> Any:
+    def _fire(self, trigger_event: EclypseEvent | None = None) -> Any:
         """Fire the event.
 
         Args:
-            trigger_event (Optional[EclypseEvent]): The event that triggered\
+            trigger_event (EclypseEvent | None): The event that triggered\
                 this event. Defaults to None.
 
         Raises:
@@ -236,7 +240,6 @@ class EclypseEvent:
             )
 
         event_data = self._call_by_type(trigger_event)
-
         self._data = event_data if event_data is not None else {}
         self.trigger_bucket.reset()
 
@@ -268,11 +271,11 @@ class EclypseEvent:
         return self.trigger_bucket._n_triggers
 
     @property
-    def triggers(self) -> List[Trigger]:
+    def triggers(self) -> list[Trigger]:
         """The triggers associated with the event.
 
         Returns:
-            List[Trigger]: The triggers associated with the event.
+            list[Trigger]: The triggers associated with the event.
         """
         return self.trigger_bucket.triggers
 
@@ -287,14 +290,33 @@ class EclypseEvent:
             raise ValueError("The event must be associated with a simulator.")
         return self._simulator
 
+    def attach_simulator(self, simulator: Simulator):
+        """Attach the event to a simulator runtime."""
+        self._simulator = simulator
+
+    def detach_simulator(self):
+        """Detach the event from its simulator runtime."""
+        self._simulator = None
+
     @property
     def data(self) -> Any:
-        """The data generated by the event.
-
-        Returns:
-            Any: The data generated by the event.
-        """
+        """The payload generated by the event."""
         return self._data
+
+    @property
+    def role(self) -> EventRole:
+        """The workflow role of the event."""
+        return self._role
+
+    @property
+    def is_metric(self) -> bool:
+        """Whether the event is a metric."""
+        return self._role is EventRole.METRIC
+
+    @property
+    def is_post_event(self) -> bool:
+        """Whether the event is executed after another event fires."""
+        return self._role is not EventRole.EVENT
 
     @property
     def remote(self) -> bool:
@@ -315,27 +337,32 @@ class EclypseEvent:
         return logger.bind(id=self.name)
 
     @property
-    def report_types(self) -> List[str]:
+    def report_types(self) -> list[str]:
         """Get the report types for the event.
 
         Returns:
-            List[str]: The report types for the event.
+            list[str]: The report types for the event.
         """
         return self._report
+
+    def set_report_types(self, report_types: list[str]):
+        """Replace the report formats associated with the event."""
+        self._report = list(report_types)
 
 
 def _application_fn(
     fn: Callable,
-    placements: Dict[str, Placement],
+    placements: dict[str, Placement],
     infr: Infrastructure,
     flatten: bool = False,
     **event_data,
 ) -> Any:
+    result = {
+        pl.application.id: fn(pl.application, pl, infr, **event_data)
+        for pl in placements.values()
+    }
     if not flatten:
-        return {
-            pl.application.id: fn(pl.application, pl, infr, **event_data)
-            for pl in placements.values()
-        }
+        return result
 
     return tuple(
         (pl.application.id, *flat_value)
@@ -346,19 +373,20 @@ def _application_fn(
 
 def _service_fn(
     fn: Callable,
-    placements: Dict[str, Placement],
+    placements: dict[str, Placement],
     infr: Infrastructure,
     flatten: bool = False,
     **event_data,
 ) -> Any:
-    if not flatten:
-        return {
-            pl.application.id: {
-                s: fn(s, req, pl, infr, **event_data)
-                for s, req in pl.application.nodes(data=True)
-            }
-            for pl in placements.values()
+    result = {
+        pl.application.id: {
+            s: fn(s, req, pl, infr, **event_data)
+            for s, req in pl.application.nodes(data=True)
         }
+        for pl in placements.values()
+    }
+    if not flatten:
+        return result
 
     return tuple(
         (pl.application.id, service_id, *flat_value)
@@ -370,12 +398,12 @@ def _service_fn(
 
 def _remote_service_fn(
     fn: Callable,
-    placements: Dict[str, Placement],
+    placements: dict[str, Placement],
     infr: Infrastructure,
     flatten: bool = False,
     **event_data,
 ) -> Any:
-    engines: Dict[str, Optional[ActorHandle]] = defaultdict(lambda: None)
+    engines: dict[str, ActorHandle | None] = defaultdict(lambda: None)
     remotes = []
     for pl in placements.values():
         if pl.mapping:
@@ -395,37 +423,40 @@ def _remote_service_fn(
 
     results = ray_backend.get(remotes)  # type: ignore[arg-type]
     results_iter = iter(results)
+    result = {
+        pl.application.id: {s: next(results_iter) for s in pl.application.nodes}
+        for pl in placements.values()
+        if pl.mapping
+    }
     if not flatten:
-        return {
-            pl.application.id: {s: next(results_iter) for s in pl.application.nodes}
-            for pl in placements.values()
-            if pl.mapping
-        }
+        return result
 
+    report_iter = iter(results)
     return tuple(
         (pl.application.id, service_id, *flat_value)
         for pl in placements.values()
         if pl.mapping
         for service_id in pl.application.nodes
-        for flat_value in _flatten_value(next(results_iter))
+        for flat_value in _flatten_value(next(report_iter))
     )
 
 
 def _interaction_fn(
     fn: Callable,
-    placements: Dict[str, Placement],
+    placements: dict[str, Placement],
     infr: Infrastructure,
     flatten: bool = False,
     **event_data,
 ) -> Any:
-    if not flatten:
-        return {
-            pl.application.id: {
-                (source, target): fn(source, target, req, pl, infr, **event_data)
-                for source, target, req in pl.application.edges(data=True)
-            }
-            for pl in placements.values()
+    result = {
+        pl.application.id: {
+            (source, target): fn(source, target, req, pl, infr, **event_data)
+            for source, target, req in pl.application.edges(data=True)
         }
+        for pl in placements.values()
+    }
+    if not flatten:
+        return result
 
     return tuple(
         (pl.application.id, source, target, *flat_value)
@@ -439,23 +470,24 @@ def _interaction_fn(
 
 def _infrastructure_fn(
     fn: Callable, infr: Infrastructure, placement_view: PlacementView, **event_data
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return fn(infr, placement_view, **event_data)
 
 
 def _node_fn(
     fn: Callable,
-    placements: Dict[str, Placement],
+    placements: dict[str, Placement],
     infr: Infrastructure,
     placement_view: PlacementView,
     flatten: bool = False,
     **event_data,
 ) -> Any:
+    result = {
+        node: fn(node, res, placements, infr, placement_view, **event_data)
+        for node, res in infr.nodes(data=True)
+    }
     if not flatten:
-        return {
-            node: fn(node, res, placements, infr, placement_view, **event_data)
-            for node, res in infr.nodes(data=True)
-        }
+        return result
 
     return tuple(
         (node, *flat_value)
@@ -468,19 +500,20 @@ def _node_fn(
 
 def _link_fn(
     fn: Callable,
-    placements: Dict[str, Placement],
+    placements: dict[str, Placement],
     infr: Infrastructure,
     placement_view: PlacementView,
     flatten: bool = False,
     **event_data,
 ) -> Any:
+    result = {
+        (source, target): fn(
+            source, target, res, placements, infr, placement_view, **event_data
+        )
+        for source, target, res in infr.edges(data=True)
+    }
     if not flatten:
-        return {
-            (source, target): fn(
-                source, target, res, placements, infr, placement_view, **event_data
-            )
-            for source, target, res in infr.edges(data=True)
-        }
+        return result
 
     return tuple(
         (source, target, *flat_value)
@@ -491,7 +524,7 @@ def _link_fn(
     )
 
 
-def _flatten_value(value: Any) -> Generator[Tuple[Any, ...], None, None]:
+def _flatten_value(value: Any) -> Generator[tuple[Any, ...], None, None]:
     """Flatten a value into tuple parts."""
     if isinstance(value, dict):
         for key, item in value.items():
@@ -509,7 +542,7 @@ def _flatten_value(value: Any) -> Generator[Tuple[Any, ...], None, None]:
 
 def _flatten_pair(
     key: Any, value: Any
-) -> Generator[Tuple[Tuple[Any, ...], Tuple[Any, ...]], None, None]:
+) -> Generator[tuple[tuple[Any, ...], tuple[Any, ...]], None, None]:
     """Flatten a key/value pair into tuple parts."""
     key_parts = key if isinstance(key, tuple) else (key,)
     for value_parts in _flatten_value(value):

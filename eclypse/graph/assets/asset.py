@@ -1,11 +1,16 @@
 """Module for the Asset class.
 
-It represents a node resource or a service requirement, such as CPU, GPU, RAM or node availability.
+It represents a node resource or a service requirement, such as CPU,
+GPU, RAM or node availability.
 
-It provides the inteface for the basic algebraic functions between assets:
-- aggregate: aggregate the assets into a single asset.
-- satisfies: check if the asset satisfies a constraint based on the total ordering of the asset.
-- is_consistent: check if the asset has a feasible value, i.e., it is within the bounds.
+It provides the inteface for the basic algebraic functions between
+assets:
+
+- `aggregate`: aggregate the assets into a single asset.
+- `satisfies`: check if the asset satisfies a constraint based on the
+  total ordering of the asset.
+- `is_consistent`: check if the asset has a feasible value, i.e. it is
+  within the bounds.
 """
 
 from __future__ import annotations
@@ -15,14 +20,14 @@ from copy import deepcopy
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Optional,
-    Union,
 )
 
 from .space import AssetSpace
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Callable,
+    )
     from random import Random
 
     from eclypse.utils.types import PrimitiveType
@@ -41,16 +46,15 @@ class Asset:
         self,
         lower_bound: Any,
         upper_bound: Any,
-        init_fn_or_value: Optional[
-            Union[PrimitiveType, AssetSpace, Callable[[], Any]]
-        ] = None,
+        init_fn_or_value: PrimitiveType | AssetSpace | Callable[[], Any] | None = None,
         functional: bool = True,
     ):
         """Initialize the asset with the lower and upper bounds.
 
-        The lower and the upper bounds represent the element which is always contained in
-        and the element the always contains the asset, respectively. Thus, they must
-        respect the total ordering of the asset.
+        The lower and the upper bounds represent the element which is
+        always contained in and the element the always contains the
+        asset, respectively. Thus, they must respect the total ordering
+        of the asset.
 
         The `init_fn_or_value` parameter is the function to initialize the asset. It can
         be a primitive type, a callable with no arguments or an `AssetSpace` object.
@@ -62,7 +66,7 @@ class Asset:
         Args:
             lower_bound (Any): The lower bound of the asset.
             upper_bound (Any): The upper bound of the asset.
-            init_fn_or_value (Optional[Union[PrimitiveType, AssetSpace, Callable[[], Any]]]):
+            init_fn_or_value (PrimitiveType | AssetSpace | Callable[[], Any] | None):
                 The function to initialize the asset. It can be a primitive type, a
                 callable with no arguments or an `AssetSpace` object. If it is not
                 provided, the asset will be initialized with the lower bound.
@@ -150,8 +154,9 @@ class Asset:
     def flip(self) -> Asset:
         """Flip the asset.
 
-        Move the perspective from being a "capability" to be a "requirement" and vice versa.
-        By default, the asset is left unchanged, thus the method returns a copy of the asset.
+        Move the perspective from being a "capability" to be a
+        "requirement" and vice versa. By default, the asset is left
+        unchanged, thus the method returns a copy of the asset.
 
         Returns:
             Asset: The flipped asset.

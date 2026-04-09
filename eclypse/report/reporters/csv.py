@@ -11,16 +11,19 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    Generator,
 )
 
 import aiofiles  # type: ignore[import-untyped]
 
-from eclypse.report._schema import DEFAULT_REPORT_HEADERS
 from eclypse.report.reporter import Reporter
+from eclypse.report.schema import DEFAULT_REPORT_HEADERS
+from eclypse.utils.defaults import CSV_REPORT_DIR
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Generator,
+    )
+
     from eclypse.workflow.event import EclypseEvent
 
 CSV_DELIMITER = ","
@@ -33,11 +36,11 @@ class CSVReporter(Reporter):
     reportable.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, report_path: str | Path):
         """Initialize the CSV reporter."""
-        super().__init__(*args, **kwargs)
-        self.report_path = self.report_path / "csv"
-        self._files: Dict[str, Any] = {}
+        super().__init__(report_path)
+        self.report_path = self.report_path / CSV_REPORT_DIR
+        self._files: dict[str, Any] = {}
 
     def report(
         self,
@@ -50,7 +53,8 @@ class CSVReporter(Reporter):
         Args:
             event_name (str): The name of the event.
             event_idx (int): The index of the event trigger (step).
-            callback (EclypseEvent): The executed callback containing the data to report.
+            callback (EclypseEvent):
+                The executed callback containing the data to report.
         """
         for line in self.callback_rows(callback):
             if line[-1] is None:

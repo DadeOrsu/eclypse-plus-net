@@ -20,8 +20,6 @@ from threading import (
 )
 from typing import (
     TYPE_CHECKING,
-    Dict,
-    Optional,
 )
 
 from eclypse.placement import PlacementManager
@@ -32,7 +30,10 @@ from eclypse.utils._logging import (
 from eclypse.utils.constants import (
     FLOAT_EPSILON,
     RND_SEED,
+    START_EVENT,
+    STOP_EVENT,
 )
+from eclypse.workflow.event import EventRole
 
 from .reporter import SimulationReporter
 
@@ -69,24 +70,36 @@ class Simulator:
 
         self._config = simulation_config
         self._logger = logger
+        if self._config.events is None:
+            raise RuntimeError(
+                "Simulation events must be resolved before simulator init."
+            )
+        if self._config.path is None:
+            raise RuntimeError(
+                "Simulation path must be resolved before simulator init."
+            )
+        if self._config.reporters is None:
+            raise RuntimeError(
+                "Simulation reporters must be resolved before simulator init."
+            )
 
         self._infrastructure = infrastructure
         self._manager = PlacementManager(infrastructure=self._infrastructure)
 
-        self._events: Dict[str, EclypseEvent] = {
+        self._events: dict[str, EclypseEvent] = {
             event.name: event for event in self._config.events
         }
         for event in self._events.values():
-            event._simulator = self
+            event.attach_simulator(self)
             event.trigger_bucket.init()
 
-        # Simulation state
+            # Simulation state
         self._event_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
         self._events_queue: asyncio.Queue = asyncio.Queue()
         self._ordered_events = tuple(
             sorted(
                 self._events.values(),
-                key=lambda event: not event.is_callback,
+                key=lambda event: event.role is EventRole.EVENT,
             )
         )
 
@@ -114,7 +127,7 @@ class Simulator:
             **kwargs: The arguments to pass to the event.
 
         Returns:
-            Optional[Dict[str, Any]]: The result of the events activated on the \
+            dict[str, Any] | None: The result of the events activated on the \
                 given event.
         """
         event = self._events[event_name]
@@ -137,14 +150,17 @@ class Simulator:
             return
 
         self._stop_requested = True
-        asyncio.run_coroutine_threadsafe(self.enqueue_event("stop"), self._event_loop)
+        asyncio.run_coroutine_threadsafe(
+            self.enqueue_event(STOP_EVENT),
+            self._event_loop,
+        )
 
-    async def enqueue_event(self, event_name: str, triggered_by: Optional[str] = None):
+    async def enqueue_event(self, event_name: str, triggered_by: str | None = None):
         """Enqueue an event to be processed by the simulation.
 
         Args:
             event_name (str): The name of the event to enqueue.
-            triggered_by (Optional[str], optional): The name of the event that
+            triggered_by (str | None, optional): The name of the event that
                 triggered this event. Defaults to None.
         """
         await self._events_queue.put(
@@ -157,10 +173,10 @@ class Simulator:
             + (f", triggered by '{triggered_by}'" if triggered_by else "")
         )
 
-        if event_name == "stop":
+        if event_name == STOP_EVENT:
             self._status = SimulationState.STOPPING
 
-        if not self._events[event_name].is_callback:
+        if not self._events[event_name].is_post_event:
             for curr_evt in self._ordered_events:
                 if curr_evt.name != event_name and curr_evt._trigger(
                     self._events[event_name]
@@ -171,7 +187,7 @@ class Simulator:
         """Run the simulation."""
         try:
             await self._reporter.start(self._event_loop)
-            await self.enqueue_event("start")
+            await self.enqueue_event(START_EVENT)
 
             # Run the simulation
             while self.status == SimulationState.RUNNING or (
@@ -198,7 +214,7 @@ class Simulator:
                 except Exception as e:
                     print_exception(e, self.__class__.__name__)
                     if self.status != SimulationState.STOPPING:
-                        await self.enqueue_event("stop")
+                        await self.enqueue_event(STOP_EVENT)
                 finally:
                     await asyncio.sleep(FLOAT_EPSILON)
         finally:
@@ -207,30 +223,30 @@ class Simulator:
     async def fire(
         self,
         event_name: str,
-        triggered_by: Optional[str] = None,
+        triggered_by: str | None = None,
     ):
         """Fire the event."""
         event = self._events[event_name]
         trigger_event = self._events[triggered_by] if triggered_by else None
         event._fire(trigger_event)
-        if trigger_event is not None and event.is_callback:
+        if trigger_event is not None and event.is_metric:
             await self._reporter.report(
                 event_name=trigger_event.name,
                 event_idx=trigger_event.n_calls,
                 callback=event,
             )
 
-    def wait(self, timeout: Optional[float] = None):
+    def wait(self, timeout: float | None = None):
         """Wait for the simulation to finish.
 
         Args:
-            timeout (Optional[float], optional): The maximum time to wait for the
+            timeout (float | None, optional): The maximum time to wait for the
                 simulation to finish. Defaults to None, meaning indefinite wait.
         """
         self._finished.wait(timeout=timeout)
 
     async def _finalize_shutdown(self):
-        """Ensure all background work is flushed and the completion state is signalled."""
+        """Ensure background work is flushed and completion is signalled."""
         try:
             await self._reporter.stop()
         finally:
@@ -241,7 +257,7 @@ class Simulator:
     def register(
         self,
         application: Application,
-        placement_strategy: Optional[PlacementStrategy] = None,
+        placement_strategy: PlacementStrategy | None = None,
     ):
         """Include an application in the simulation.
 
@@ -271,20 +287,20 @@ class Simulator:
         return self._infrastructure
 
     @property
-    def applications(self) -> Dict[str, Application]:
+    def applications(self) -> dict[str, Application]:
         """Get the applications included in the simulation.
 
         Returns:
-            Dict[str, Application]: The dictionary of Applications.
+            dict[str, Application]: The dictionary of Applications.
         """
         return {p.application.id: p.application for p in self.placements.values()}
 
     @property
-    def placements(self) -> Dict[str, Placement]:
+    def placements(self) -> dict[str, Placement]:
         """Get the placements of the applications in the simulation.
 
         Returns:
-            Dict[str, Placement]: The placements of the applications.
+            dict[str, Placement]: The placements of the applications.
         """
         return self._manager.placements
 
@@ -304,7 +320,7 @@ class Simulator:
         Returns:
             Logger: The logger of the simulation.
         """
-        return self._logger.bind(id="Simulation")
+        return self._logger.bind(id="Simulation")  # type: ignore[return-value]
 
     @property
     def status(self) -> SimulationState:

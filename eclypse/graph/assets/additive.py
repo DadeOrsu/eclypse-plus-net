@@ -5,7 +5,8 @@ It provides the interface for the basic algebraic functions between assets:
 
 - `aggregate`: Aggregate the assets into a single asset via summation.
 - `satisfies`: Check if the asset contains another asset.
-- `is_consistent`: Check if the asset belongs to the interval [lower_bound, upper_bound].
+- `is_consistent`: Check if the asset belongs to the interval
+  [lower_bound, upper_bound].
 """
 
 from __future__ import annotations
@@ -13,14 +14,15 @@ from __future__ import annotations
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Optional,
-    Union,
 )
 
 from .asset import Asset
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Callable,
+    )
+
     from eclypse.utils.types import PrimitiveType
 
     from .space import AssetSpace
@@ -33,9 +35,7 @@ class Additive(Asset):
         self,
         lower_bound: float,
         upper_bound: float,
-        init_fn_or_value: Optional[
-            Union[PrimitiveType, AssetSpace, Callable[[], Any]]
-        ] = None,
+        init_fn_or_value: PrimitiveType | AssetSpace | Callable[[], Any] | None = None,
         functional: bool = True,
     ):
         """Create a new Additive asset.
@@ -43,7 +43,7 @@ class Additive(Asset):
         Args:
             lower_bound (float): The lower bound of the asset.
             upper_bound (float): The upper bound of the asset.
-            init_fn_or_value (Optional[Union[PrimitiveType, AssetSpace, Callable[[], Any]]]):
+            init_fn_or_value (PrimitiveType | AssetSpace | Callable[[], Any] | None):
                 The function to initialize the asset. It can be a primitive type, a
                 callable with no arguments or an `AssetSpace` object. If it is not
                 provided, the asset will be initialized with the lower bound.

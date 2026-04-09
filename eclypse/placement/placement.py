@@ -10,11 +10,6 @@ from collections import defaultdict
 from typing import (
     TYPE_CHECKING,
     Any,
-    DefaultDict,
-    Dict,
-    List,
-    Optional,
-    Tuple,
 )
 
 if TYPE_CHECKING:
@@ -36,27 +31,29 @@ class Placement:
         self,
         infrastructure: Infrastructure,
         application: Application,
-        strategy: Optional[PlacementStrategy] = None,
+        strategy: PlacementStrategy | None = None,
     ):
         """Initializes the Placement.
 
         Args:
-            infrastructure (Infrastructure): The infrastructure to place the application onto.
-            application (Application): The application to place onto the infrastructure.
+            infrastructure (Infrastructure):
+                The infrastructure to place the application onto.
+            application (Application):
+                The application to place onto the infrastructure.
             strategy (PlacementStrategy): The strategy to use for the placement.
         """
-        self.strategy: Optional[PlacementStrategy] = strategy
+        self.strategy: PlacementStrategy | None = strategy
 
         self.infrastructure: Infrastructure = infrastructure
         self.application: Application = application
 
         self._deployed: bool = False
-        self.mapping: Dict[str, str] = {}
+        self.mapping: dict[str, str] = {}
 
         self._to_reset = False
 
     def _generate_mapping(
-        self, placements: Dict[str, Placement], placement_view: PlacementView
+        self, placements: dict[str, Placement], placement_view: PlacementView
     ):
         """Generate the mapping {service: node}, according to the placement strategy."""
         if self.strategy is None:
@@ -68,7 +65,23 @@ class Placement:
     def _reset_mapping(self):
         """Reset the mapping of the placement."""
         self.mapping = {}
+        self.clear_reset()
+
+    def mark_for_reset(self):
+        """Mark the placement so it will be reset during enactment."""
+        self._to_reset = True
+
+    def clear_reset(self):
+        """Clear the pending reset marker."""
         self._to_reset = False
+
+    def mark_deployed(self):
+        """Mark the placement as deployed on the remote infrastructure."""
+        self._deployed = True
+
+    def mark_undeployed(self):
+        """Mark the placement as no longer deployed."""
+        self._deployed = False
 
     def service_placement(self, service_id: str) -> str:
         """Return the node where a service is placed.
@@ -81,20 +94,20 @@ class Placement:
         """
         return self.mapping[service_id]
 
-    def services_on_node(self, node_name: str) -> List[str]:
+    def services_on_node(self, node_name: str) -> list[str]:
         """Return all the services placed on a node.
 
         Args:
             node_name (str): The name of the node.
 
         Returns:
-            List[str]: The names of the services placed on the node.
+            list[str]: The names of the services placed on the node.
         """
         return [
             service_id for service_id, node in self.mapping.items() if node == node_name
         ]
 
-    def interactions_on_link(self, source: str, target: str) -> List[Tuple[str, str]]:
+    def interactions_on_link(self, source: str, target: str) -> list[tuple[str, str]]:
         """Return all the services interactions crossing a link.
 
         Args:
@@ -102,11 +115,12 @@ class Placement:
             target (str): The name of the target node.
 
         Returns:
-            List[Tuple[str, str]]: The names of the services interactions crossing the link.
+            list[tuple[str, str]]:
+                The names of the services interactions crossing the link.
         """
         services_by_node = self.node_service_mapping()
-        path_cache: Dict[
-            Tuple[str, str], Optional[List[Tuple[str, str, Dict[str, Any]]]]
+        path_cache: dict[
+            tuple[str, str], list[tuple[str, str, dict[str, Any]]] | None
         ] = {}
         return self._incoming_interactions_on_link(
             source, target, services_by_node, path_cache
@@ -116,12 +130,10 @@ class Placement:
 
     def _get_cached_path(
         self,
-        path_cache: Dict[
-            Tuple[str, str], Optional[List[Tuple[str, str, Dict[str, Any]]]]
-        ],
+        path_cache: dict[tuple[str, str], list[tuple[str, str, dict[str, Any]]] | None],
         source: str,
         target: str,
-    ) -> Optional[List[Tuple[str, str, Dict[str, Any]]]]:
+    ) -> list[tuple[str, str, dict[str, Any]]] | None:
         """Return a cached infrastructure path between two nodes."""
         key = (source, target)
         if key not in path_cache:
@@ -130,7 +142,7 @@ class Placement:
 
     @staticmethod
     def _path_crosses_link(
-        path: Optional[List[Tuple[str, str, Dict[str, Any]]]],
+        path: list[tuple[str, str, dict[str, Any]]] | None,
         source: str,
         target: str,
     ) -> bool:
@@ -143,11 +155,9 @@ class Placement:
         self,
         source: str,
         target: str,
-        services_by_node: Dict[str, List[str]],
-        path_cache: Dict[
-            Tuple[str, str], Optional[List[Tuple[str, str, Dict[str, Any]]]]
-        ],
-    ) -> List[Tuple[str, str]]:
+        services_by_node: dict[str, list[str]],
+        path_cache: dict[tuple[str, str], list[tuple[str, str, dict[str, Any]]] | None],
+    ) -> list[tuple[str, str]]:
         """Collect interactions whose callee is placed on the target node."""
         interactions = []
         for callee in services_by_node[target]:
@@ -164,11 +174,9 @@ class Placement:
         self,
         source: str,
         target: str,
-        services_by_node: Dict[str, List[str]],
-        path_cache: Dict[
-            Tuple[str, str], Optional[List[Tuple[str, str, Dict[str, Any]]]]
-        ],
-    ) -> List[Tuple[str, str]]:
+        services_by_node: dict[str, list[str]],
+        path_cache: dict[tuple[str, str], list[tuple[str, str, dict[str, Any]]] | None],
+    ) -> list[tuple[str, str]]:
         """Collect interactions whose caller is placed on the source node."""
         interactions = []
         for caller in services_by_node[source]:
@@ -181,37 +189,41 @@ class Placement:
                     interactions.append((caller, callee))
         return interactions
 
-    def node_service_mapping(self) -> Dict[str, List[str]]:
+    def node_service_mapping(self) -> dict[str, list[str]]:
         """Return a view of the placement.
 
         Returns:
-            Dict[str, List[str]]: The mapping of nodes to the list of services placed on them.
+            dict[str, list[str]]:
+                The mapping of nodes to the list of services placed on
+                them.
         """
-        node_services: DefaultDict[str, List[str]] = defaultdict(list)
+        node_services: defaultdict[str, list[str]] = defaultdict(list)
         for node in self.infrastructure.nodes:
             node_services[node]
         for service_id, node in self.mapping.items():
             node_services[node].append(service_id)
         return dict(node_services)
 
-    def link_interaction_mapping(self) -> Dict[Tuple[str, str], List[Tuple[str, str]]]:
+    def link_interaction_mapping(self) -> dict[tuple[str, str], list[tuple[str, str]]]:
         """Return a view of the placement.
 
         Returns:
-            Dict[Tuple[str, str], List[Tuple[str, str]]]: The mapping of links to the list
-                of services interactions crossing them.
+            dict[tuple[str, str], list[tuple[str, str]]]:
+                The mapping of links to the list of services
+                interactions crossing them.
         """
         return {
             (source, target): self.interactions_on_link(source, target)
             for source, target in self.infrastructure.edges
         }
 
-    def node_requirements_mapping(self) -> Dict[str, Dict[str, Any]]:
+    def node_requirements_mapping(self) -> dict[str, dict[str, Any]]:
         """Return a view of the placement.
 
         Returns:
-            Dict[str, ServiceRequirements]: The mapping of nodes to the total requirements
-                of the services placed on them.
+            dict[str, ServiceRequirements]:
+                The mapping of nodes to the total requirements of the
+                services placed on them.
         """
         return {
             node: self.application.node_assets.aggregate(
@@ -224,11 +236,11 @@ class Placement:
             for node, services in self.node_service_mapping().items()
         }
 
-    def link_requirements_mapping(self) -> Dict[Tuple[str, str], Dict[str, Any]]:
+    def link_requirements_mapping(self) -> dict[tuple[str, str], dict[str, Any]]:
         """Return a view of the placement.
 
         Returns:
-            Dict[Tuple[str, str], S2SRequirements]: The mapping of links to the total
+            dict[tuple[str, str], S2SRequirements]: The mapping of links to the total
                 requirements of the services interactions crossing them.
         """
         return {
@@ -271,14 +283,24 @@ class Placement:
         return self.__str__()
 
     @property
-    def is_partial(self) -> List[str]:
+    def is_partial(self) -> list[str]:
         """Return whether the placement is partial or not.
 
         Returns:
-            List[str]: The list of services that are not placed.
+            list[str]: The list of services that are not placed.
         """
         return list(
             service
             for service in self.application.nodes
             if service not in self.mapping or self.mapping[service] is None
         )
+
+    @property
+    def reset_requested(self) -> bool:
+        """Return whether the placement is marked for reset."""
+        return self._to_reset
+
+    @property
+    def deployed(self) -> bool:
+        """Return whether the placement has been remotely deployed."""
+        return self._deployed

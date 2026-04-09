@@ -8,8 +8,6 @@ from time import time
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    Optional,
 )
 
 import networkx as nx
@@ -21,7 +19,9 @@ from eclypse.utils.constants import (
     MIN_FLOAT,
     MIN_LATENCY,
     RND_SEED,
+    STOP_EVENT,
 )
+from eclypse.utils.defaults import GML_REPORT_DIR
 
 from . import metric
 
@@ -42,7 +42,7 @@ def response_time(
     app: Application,
     placement: Placement,
     infr: Infrastructure,
-) -> Optional[float]:
+) -> float | None:
     """Return the response time for each application.
 
     Args:
@@ -51,7 +51,7 @@ def response_time(
         infr (Infrastructure): The infrastructure.
 
     Returns:
-        Optional[float]: The maximum response time for the application, if any,
+        float | None: The maximum response time for the application, if any,
             'inf' otherwise.
     """
     response_times = []
@@ -73,7 +73,7 @@ def response_time(
                 )
                 rt += service_processing_time + node_processing_time + link_latency
 
-            # Add the last service and the last node processing time
+                # Add the last service and the last node processing time
             last_service = flow[-1]
             rt += app.nodes[last_service].get("processing_time", MIN_FLOAT)
             rt += infr.nodes[placement.service_placement(last_service)].get(
@@ -89,7 +89,7 @@ def response_time(
 @metric.service(name="placement")
 def placement_mapping(
     service_id: str,
-    _: Dict[str, Any],
+    _: dict[str, Any],
     placement: Placement,
     __: Infrastructure,
 ) -> str:
@@ -110,7 +110,7 @@ def placement_mapping(
 @metric.service
 def required_cpu(
     _: str,
-    requirements: Dict[str, Any],
+    requirements: dict[str, Any],
     __: Placement,
     ___: Infrastructure,
 ) -> float:
@@ -118,7 +118,7 @@ def required_cpu(
 
     Args:
         _: the service ID.
-        requirements (Dict[str, Any]): The requirements of the service.
+        requirements (dict[str, Any]): The requirements of the service.
         __: The placement of the application the service belongs to.
         ___: The infrastructure.
 
@@ -131,7 +131,7 @@ def required_cpu(
 @metric.service
 def required_ram(
     _: str,
-    requirements: Dict[str, Any],
+    requirements: dict[str, Any],
     __: Placement,
     ___: Infrastructure,
 ) -> float:
@@ -139,7 +139,7 @@ def required_ram(
 
     Args:
         _: the service ID.
-        requirements (Dict[str, Any]): The requirements of the service.
+        requirements (dict[str, Any]): The requirements of the service.
         __: The placement of the application the service belongs to.
         ___: The infrastructure.
 
@@ -152,7 +152,7 @@ def required_ram(
 @metric.service
 def required_storage(
     _: str,
-    requirements: Dict[str, Any],
+    requirements: dict[str, Any],
     __: Placement,
     ___: Infrastructure,
 ) -> float:
@@ -160,7 +160,7 @@ def required_storage(
 
     Args:
         _: the service ID.
-        requirements (Dict[str, Any]): The requirements of the service.
+        requirements (dict[str, Any]): The requirements of the service.
         __: The placement of the application the service belongs to.
         ___: The infrastructure.
 
@@ -173,7 +173,7 @@ def required_storage(
 @metric.service
 def required_gpu(
     _: str,
-    requirements: Dict[str, Any],
+    requirements: dict[str, Any],
     __: Placement,
     ___: Infrastructure,
 ) -> float:
@@ -181,7 +181,7 @@ def required_gpu(
 
     Args:
         _: the service ID.
-        requirements (Dict[str, Any]): The requirements of the service.
+        requirements (dict[str, Any]): The requirements of the service.
         __: The placement of the application the service belongs to.
         ___: The infrastructure.
 
@@ -195,7 +195,7 @@ def required_gpu(
 def required_latency(
     _: str,
     __: str,
-    requirements: Dict[str, Any],
+    requirements: dict[str, Any],
     ___: Placement,
     ____: Infrastructure,
 ) -> float:
@@ -204,7 +204,7 @@ def required_latency(
     Args:
         _: The source service ID.
         __: The destination service ID.
-        requirements (Dict[str, Any]): The requirements of the interaction.
+        requirements (dict[str, Any]): The requirements of the interaction.
         ___: The placement of the application the service belongs to.
         ____: The infrastructure.
 
@@ -218,7 +218,7 @@ def required_latency(
 def required_bandwidth(
     _: str,
     __: str,
-    requirements: Dict[str, Any],
+    requirements: dict[str, Any],
     ___: Placement,
     ____: Infrastructure,
 ) -> float:
@@ -227,7 +227,7 @@ def required_bandwidth(
     Args:
         _: The source service ID.
         __: The destination service ID.
-        requirements (Dict[str, Any]): The requirements of the interaction.
+        requirements (dict[str, Any]): The requirements of the interaction.
         ___: The placement of the application the service belongs to.
         ____: The infrastructure.
 
@@ -236,8 +236,7 @@ def required_bandwidth(
     """
     return requirements.get("bandwidth", MIN_BANDWIDTH)
 
-
-### Infrastructure
+    ### Infrastructure
 
 
 @metric.infrastructure
@@ -257,8 +256,8 @@ def alive_nodes(infr: Infrastructure, _: PlacementView) -> int:
 @metric.node
 def featured_cpu(
     _: str,
-    resources: Dict[str, Any],
-    __: Dict[str, Placement],
+    resources: dict[str, Any],
+    __: dict[str, Placement],
     ___: Infrastructure,
     ____: PlacementView,
 ) -> float:
@@ -266,7 +265,7 @@ def featured_cpu(
 
     Args:
         _: The placement of the application the service belongs to.
-        resources (Dict[str, Any]): The resources of the node.
+        resources (dict[str, Any]): The resources of the node.
         __: The infrastructure.
         ___: The placement view.
 
@@ -279,8 +278,8 @@ def featured_cpu(
 @metric.node
 def featured_ram(
     _: str,
-    resources: Dict[str, Any],
-    __: Dict[str, Placement],
+    resources: dict[str, Any],
+    __: dict[str, Placement],
     ___: Infrastructure,
     ____: PlacementView,
 ) -> float:
@@ -288,7 +287,7 @@ def featured_ram(
 
     Args:
         _: The placement of the application the service belongs to.
-        resources (Dict[str, Any]): The resources of the node.
+        resources (dict[str, Any]): The resources of the node.
         __: The infrastructure.
         ___: The placement view.
 
@@ -301,8 +300,8 @@ def featured_ram(
 @metric.node
 def featured_storage(
     _: str,
-    resources: Dict[str, Any],
-    __: Dict[str, Placement],
+    resources: dict[str, Any],
+    __: dict[str, Placement],
     ___: Infrastructure,
     ____: PlacementView,
 ) -> float:
@@ -310,7 +309,7 @@ def featured_storage(
 
     Args:
         _: The placement of the application the service belongs to.
-        resources (Dict[str, Any]): The resources of the node.
+        resources (dict[str, Any]): The resources of the node.
         __: The infrastructure.
         ___: The placement view.
 
@@ -323,8 +322,8 @@ def featured_storage(
 @metric.node
 def featured_gpu(
     _: str,
-    resources: Dict[str, Any],
-    __: Dict[str, Placement],
+    resources: dict[str, Any],
+    __: dict[str, Placement],
     ___: Infrastructure,
     ____: PlacementView,
 ) -> float:
@@ -332,7 +331,7 @@ def featured_gpu(
 
     Args:
         _: The placement of the application the service belongs to.
-        resources (Dict[str, Any]): The resources of the node.
+        resources (dict[str, Any]): The resources of the node.
         __: The infrastructure.
         ___: The placement view.
 
@@ -346,8 +345,8 @@ def featured_gpu(
 def featured_latency(
     _: str,
     __: str,
-    resources: Dict[str, Any],
-    ___: Dict[str, Placement],
+    resources: dict[str, Any],
+    ___: dict[str, Placement],
     ____: Infrastructure,
     _____: PlacementView,
 ) -> float:
@@ -356,7 +355,7 @@ def featured_latency(
     Args:
         _: The source node ID.
         __: The destination node ID.
-        resources (Dict[str, Any]): The resources of the link.
+        resources (dict[str, Any]): The resources of the link.
         ___: The placement of the application the service belongs to.
         ____: The infrastructure.
         _____: The placement view.
@@ -371,8 +370,8 @@ def featured_latency(
 def featured_bandwidth(
     _: str,
     __: str,
-    resources: Dict[str, Any],
-    ___: Dict[str, Placement],
+    resources: dict[str, Any],
+    ___: dict[str, Placement],
     ____: Infrastructure,
     _____: PlacementView,
 ) -> float:
@@ -381,7 +380,7 @@ def featured_bandwidth(
     Args:
         _: The source node ID.
         __: The destination node ID.
-        resources (Dict[str, Any]): The resources of the link.
+        resources (dict[str, Any]): The resources of the link.
         ___: The placement of the application the service belongs to.
         ____: The infrastructure.
         _____: The placement view.
@@ -392,7 +391,7 @@ def featured_bandwidth(
     return resources.get("bandwidth", MIN_BANDWIDTH)
 
 
-@metric.simulation(activates_on="stop")
+@metric.simulation(activates_on=STOP_EVENT)
 def seed(*_) -> str:
     """Return the seed used in the simulation.
 
@@ -405,7 +404,7 @@ def seed(*_) -> str:
     return os.environ[RND_SEED]
 
 
-@metric.simulation(name="step_number", activates_on=[DRIVING_EVENT, "stop"])
+@metric.simulation(name="step_number", activates_on=[DRIVING_EVENT, STOP_EVENT])
 class StepNumber:
     """Return the current step number."""
 
@@ -420,12 +419,12 @@ class StepNumber:
             event (EclypseEvent): The event triggering the reporting of the step number.
 
         Returns:
-            Optional[int]: The step number if the event is the DRIVING_EVENT or 'stop', \
+            int | None: The step number if the event is the DRIVING_EVENT or 'stop', \
                 None otherwise.
         """
         if event.name == DRIVING_EVENT:
             self.step += 1
-        if event.name == "stop":
+        if event.name == STOP_EVENT:
             return self.step
         return None
 
@@ -445,13 +444,13 @@ class SimulationTime:
             _ (EclypseEvent): The event triggering the reporting of the simulation time.
 
         Returns:
-            Optional[float]: The elapsed time since the simulation started \
+            float | None: The elapsed time since the simulation started \
                 if the event is 'stop', None otherwise.
         """
         return time() - self.start
 
 
-@metric.application(report="gml", activates_on="stop")
+@metric.application(report=GML_REPORT_DIR, activates_on=STOP_EVENT)
 def app_gml(app: Application, _: Placement, __: Infrastructure) -> Application:
     """Return the application graph to be saved in a GML file.
 
@@ -461,12 +460,12 @@ def app_gml(app: Application, _: Placement, __: Infrastructure) -> Application:
         __: The infrastructure.
 
     Returns:
-        Dict[str, Application]: The application graph to be saved in a GML file.
+        dict[str, Application]: The application graph to be saved in a GML file.
     """
     return app
 
 
-@metric.infrastructure(report="gml", activates_on="stop")
+@metric.infrastructure(report=GML_REPORT_DIR, activates_on=STOP_EVENT)
 def infr_gml(infr: Infrastructure, __: PlacementView) -> Infrastructure:
     """Return the infrastructure graph to be saved in a GML file.
 
@@ -481,14 +480,14 @@ def infr_gml(infr: Infrastructure, __: PlacementView) -> Infrastructure:
 
 
 @metric.service(remote=True)
-def step_result(service: Service) -> Optional[Any]:
+def step_result(service: Service) -> Any | None:
     """Return the result of the step executed by the service.
 
     Args:
         service (Service): The service.
 
     Returns:
-        Optional[Any]: The result of the step executed by the service.
+        Any | None: The result of the step executed by the service.
     """
     return service._step_queue.popleft() if service._step_queue else None
 
@@ -497,7 +496,7 @@ def get_default_metrics():
     """Return the default metrics for the simulation report.
 
     Returns:
-        List[Callable]: The default metrics for the simulation report:
+        list[Callable]: The default metrics for the simulation report:
             - required assets
             - featured_assets
             - placement_mapping

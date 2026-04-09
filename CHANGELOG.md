@@ -1,4 +1,70 @@
-## 0.8.0 (2025-11-03)
+## 0.8.4 (2026-04-07)
+
+### Fix
+
+- Keep services running on missing routes
+- Add context to remote operation failures
+
+### Refactor
+
+- Centralise shared defaults and type aliases
+- Convert remote value objects to dataclasses
+- Introduce explicit event roles and report queries
+- Rename report schema module
+- Modernise typing annotations across the codebase
+- Simplify builder exports and restore link naming
+- Align remote communication naming and request handling
+- Use explicit placement reset and deployment state
+- Simplify report frame loading and reporter initialization
+- Separate runtime preparation from simulation configuration
+- Clarify event payload helpers and simulator attachment
+
+## 0.8.3 (2026-03-27)
+
+### BREAKING CHANGE
+
+- path() return type changed. Use processing_time() for total processing time.
+
+### Feat
+
+- Add selectable report dataframe backend
+
+### Fix
+
+- Improve simulation interrupt handling
+- Add check in placement view when src and dst node are the same
+- update callers of path() method after refactor
+- handle zero cached costs correctly in path recomputation logic Introduced `_cost_changed` helper function to properly detect cost changes, minor changes in the docstring
+- **infrastructure**: replace manual subgraph patching with nx.subgraph_view
+- **infrastructure**: invalidate path/cost cache on topology changes _paths, _costs and _available were never cleared when nodes or edges were added or removed, causing stale cached paths to be returned. Added overrides which clears both caches and resets the available view.
+- **infrastructure**: correct path aggregator validation
+- prevent silent overwriting and raise quick fail instead
+
+### Refactor
+
+- Remove unused code
+- Separate configuration defaults from shared constants
+- Make report backends load frames from configurable report formats
+- decouple path() and processing_time() methods
+- **infrastructure**: separate processing time from path cost caching
+
+### Perf
+
+- Flatten callback metric payloads into tuple rows for reporting
+- Streamline reporter streaming and persistent writer handling
+- Stream report traversal and filter events by range
+- Cache remote actor handles and bound step buffers
+- Reduce residual rebuilds and placement mapping overhead
+- Cache path resources and simplify default flow generation
+- Cache event ordering in local simulator loop
+- optimize has_logic memory usage
+
+## 0.8.2 (2026-01-26)
+
+This release tag was created on a side branch and does not correspond to a
+separate linear release section in the main changelog history.
+
+## 0.8.1 (2025-11-06)
 
 ### BREAKING CHANGE
 
@@ -10,6 +76,9 @@
 
 ### Fix
 
+- Remove batch_mapping_phase and fix placement_view build
+- Switch ruff check and format in pre-commit
+- Correct prune_asset in sock_shop builder
 - Reintroduce shield_interrupt decorator to catch CTRL-C
 - Move nx import to make random generator working correctly
 
@@ -18,9 +87,20 @@
 - Merge core files into public code
 - Remove placement view residual usage
 
+## 0.8.0 (2025-11-03)
+
+This release is preserved for completeness. No grouped changelog entries were
+recovered for this tagged version.
+
 ## 0.7.4 (2025-06-27)
 
+This release is preserved for completeness. No grouped changelog entries were
+recovered for this tagged version.
+
 ## 0.7.3 (2025-06-26)
+
+This release is preserved for completeness. No grouped changelog entries were
+recovered for this tagged version.
 
 ## 0.7.2 (2025-06-25)
 
@@ -29,6 +109,9 @@
 - Add activates_on to event decorator
 
 ## 0.7.1 (2025-06-10)
+
+This release is preserved for completeness. No grouped changelog entries were
+recovered for this tagged version.
 
 ## 0.7.0 (2025-06-10)
 
@@ -61,32 +144,3 @@
 - Rewrite examples removing node group
 - Rename report and step parameters to avoid pylint warning
 - Merge echo example notebooks into a single one
-
-## 0.6.16 (2024-11-25)
-
-### Feat
-
-- Include default metric for service step result
-
-### Fix
-
-- Add missing return in Report class
-
-### Refactor
-
-- Change default gml metrics name
-- Add Report class, remove html report
-
-## 0.6.12 (2024-11-21)
-
-## 0.6.10 (2024-11-16)
-
-### Fix
-
-- Add missing await in SockShop mpi CatalogService
-- Move report class to eclypse-core
-
-### Refactor
-
-- Adjust imports from core
-- Add wrapper for SimulationConfig core class

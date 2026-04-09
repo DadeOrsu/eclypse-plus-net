@@ -16,19 +16,24 @@ class CatalogService(RESTService):
 
     @rest.endpoint("/catalog", "GET")
     def get_catalog(self, **_):
-        """Get the catalog, retrieving product details such as name, price, and description.
+        """Get the catalog with product names, prices, and descriptions.
 
         Returns:
             int: The HTTP status code.
             dict: The response body.
 
         Example:
-            (200, {
-                "products": [
-                    {"id": "1", "name": "Product 1", "price": 19.99},
-                    {"id": "2", "name": "Product 2", "price": 29.99},
-                ],
-            })
+            .. code-block:: python
+
+                (
+                    200,
+                    {
+                        "products": [
+                            {"id": "1", "name": "Product 1", "price": 19.99},
+                            {"id": "2", "name": "Product 2", "price": 29.99},
+                        ],
+                    },
+                )
         """
         return 200, {
             "products": [

@@ -9,18 +9,19 @@ from __future__ import annotations
 from typing import (
     TYPE_CHECKING,
     Any,
-    Iterable,
-    Set,
 )
 
 from eclypse.report.backend import (
     FrameBackend,
-    get_report_source,
     list_parquet_parts,
     load_jsonl_rows,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Iterable,
+    )
+
     from polars import DataFrame
 
 
@@ -37,25 +38,32 @@ class PolarsBackend(FrameBackend):
 
         self._pl = pl
 
-    def read_frame(self, stats_path, report_type: str, report_format: str) -> DataFrame:
-        """Read a report into a polars DataFrame."""
+    def _read_csv(self, source) -> DataFrame:
+        """Read a CSV report into a polars DataFrame."""
         pl = self._pl
-        source = get_report_source(stats_path, report_type, report_format)
+        return self._coerce_value_column(pl.read_csv(source))
 
-        if report_format == "csv":
-            df = pl.read_csv(source)
-        elif report_format == "parquet":
-            df = pl.read_parquet([str(part) for part in list_parquet_parts(source)])
-        elif report_format == "json":
-            df = pl.DataFrame(load_jsonl_rows(source, report_type))
-        else:
-            raise ValueError(f"Unsupported report format: {report_format}")
+    def _read_parquet(self, source) -> DataFrame:
+        """Read partitioned parquet data into a polars DataFrame."""
+        pl = self._pl
+        return self._coerce_value_column(
+            pl.read_parquet([str(part) for part in list_parquet_parts(source)])
+        )
 
+    def _read_json(self, source, report_type: str) -> DataFrame:
+        """Read JSONL report data into a polars DataFrame."""
+        pl = self._pl
+        return self._coerce_value_column(
+            pl.DataFrame(load_jsonl_rows(source, report_type))
+        )
+
+    def _coerce_value_column(self, df: DataFrame) -> DataFrame:
+        """Cast the common ``value`` column when present."""
+        pl = self._pl
         if "value" in df.columns:
-            df = df.with_columns(
+            return df.with_columns(
                 pl.col("value").cast(pl.Float64, strict=False).alias("value")
             )
-
         return df
 
     def is_empty(self, df: DataFrame) -> bool:
@@ -69,7 +77,7 @@ class PolarsBackend(FrameBackend):
         """
         return df.height == 0
 
-    def columns(self, df: DataFrame) -> Set[str]:
+    def columns(self, df: DataFrame) -> set[str]:
         """Return the set of column names.
 
         Args:

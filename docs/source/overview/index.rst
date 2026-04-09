@@ -4,6 +4,7 @@
 
    install
    getting-started/index
+   concepts/index
    advanced/index
    examples/index
 
@@ -31,6 +32,15 @@ Overview
 
    .. grid-item::
 
+      .. card:: :octicon:`book;1em;info` **Concepts**
+         :link-type: doc
+         :link: concepts/index
+
+         Learn the core building blocks behind assets, events, placement, and
+         simulation configuration.
+
+   .. grid-item::
+
       .. card:: :octicon:`terminal;1em;info` **Advanced**
          :link-type: doc
          :link: advanced/index
@@ -44,3 +54,10 @@ Overview
          :link: examples/index
 
          Explore example simulations to use ECLYPSE effectively.
+
+   .. grid-item::
+
+      .. card:: :octicon:`history;1em;info` **Changelog**
+         :link: https://github.com/eclypse-org/eclypse/blob/main/CHANGELOG.md
+
+         Track released versions and the latest published framework changes.

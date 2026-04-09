@@ -1,23 +1,20 @@
 """Random infrastructure generator.
 
-This module provides a generator for creating unstructured network topologies using
-the Erdos-Rényi random graph model. Each pair of nodes has a configurable probability
-`p` of being connected, allowing the simulation of a wide variety of sparse or dense graphs.
+This module provides a generator for creating unstructured network
+topologies using the Erdos-Rényi random graph model. Each pair of nodes
+has a configurable probability `p` of being connected, allowing the
+simulation of a wide variety of sparse or dense graphs.
 
-This is useful for stress-testing placement or routing algorithms, comparing performance
-against structured topologies, or modeling loosely connected networks such as P2P overlays
-or ad-hoc wireless systems.
+This is useful for stress-testing placement or routing algorithms,
+comparing performance against structured topologies, or modelling
+loosely connected networks such as P2P overlays or ad-hoc wireless
+systems.
 """
 
 from __future__ import annotations
 
 from typing import (
     TYPE_CHECKING,
-    Callable,
-    Dict,
-    List,
-    Literal,
-    Optional,
 )
 
 import networkx as nx
@@ -25,6 +22,10 @@ import networkx as nx
 from eclypse.graph import Infrastructure
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Callable,
+    )
+
     from networkx.classes.reportviews import (
         EdgeView,
         NodeView,
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
 
     from eclypse.graph.assets import Asset
     from eclypse.placement.strategies import PlacementStrategy
+    from eclypse.utils.types import InitPolicy
 
 
 def random(
@@ -39,16 +41,16 @@ def random(
     infrastructure_id: str = "random",
     p: float = 0.5,
     symmetric: bool = False,
-    node_update_policy: Optional[Callable[[NodeView], None]] = None,
-    link_update_policy: Optional[Callable[[EdgeView], None]] = None,
-    node_assets: Optional[Dict[str, Asset]] = None,
-    link_assets: Optional[Dict[str, Asset]] = None,
+    node_update_policy: Callable[[NodeView], None] | None = None,
+    link_update_policy: Callable[[EdgeView], None] | None = None,
+    node_assets: dict[str, Asset] | None = None,
+    link_assets: dict[str, Asset] | None = None,
     include_default_assets: bool = False,
     strict: bool = False,
-    resource_init: Literal["min", "max"] = "min",
-    path_algorithm: Optional[Callable[[nx.Graph, str, str], List[str]]] = None,
-    placement_strategy: Optional[PlacementStrategy] = None,
-    seed: Optional[int] = None,
+    resource_init: InitPolicy = "min",
+    path_algorithm: Callable[[nx.Graph, str, str], list[str]] | None = None,
+    placement_strategy: PlacementStrategy | None = None,
+    seed: int | None = None,
 ):
     """Create a random infrastructure with `n` nodes and a connection probability `p`.
 
@@ -60,22 +62,26 @@ def random(
         infrastructure_id (str): The ID of the infrastructure.
         p (float): The probability of connecting two nodes. Defaults to 0.5.
         symmetric (bool): Whether the links are symmetric. Defaults to False.
-        node_update_policy (Optional[Callable[[NodeView], None]]): The policy to update the nodes.\
-            Defaults to None.
-        link_update_policy (Optional[Callable[[EdgeView], None]]): The policy to update the links.\
-            Defaults to None.
-        node_assets (Optional[Dict[str, Asset]]): The assets for the nodes. Defaults to None.
-        link_assets (Optional[Dict[str, Asset]]): The assets for the links. Defaults to None.
-        include_default_assets (bool): Whether to include the default assets. Defaults to False.
+        node_update_policy (Callable[[NodeView], None] | None):
+            The policy to update the nodes. Defaults to None.
+        link_update_policy (Callable[[EdgeView], None] | None):
+            The policy to update the links. Defaults to None.
+        node_assets (dict[str, Asset] | None):
+            The assets for the nodes. Defaults to None.
+        link_assets (dict[str, Asset] | None):
+            The assets for the links. Defaults to None.
+        include_default_assets (bool):
+            Whether to include the default assets. Defaults to False.
         strict (bool): If True, raises an error if the asset values are not \
             consistent with their spaces. Defaults to False.
-        resource_init (Literal["min", "max"]): The initialization policy for the resources.\
-            Defaults to "min".
-        path_algorithm (Optional[Callable[[nx.Graph, str, str], List[str]]]): The algorithm to\
-            compute the paths between nodes. Defaults to None.
-        placement_strategy (Optional[PlacementStrategy]): The strategy to place the resources.\
-            Defaults to None.
-        seed (Optional[int]): The seed for the random number generator. Defaults to None.
+        resource_init (InitPolicy):
+            The initialization policy for the resources. Defaults to "min".
+        path_algorithm (Callable[[nx.Graph, str, str], list[str]] | None):
+            The algorithm to compute the paths between nodes. Defaults to
+            None.
+        placement_strategy (PlacementStrategy | None):
+            The strategy to place the resources. Defaults to None.
+        seed (int | None): The seed for the random number generator. Defaults to None.
 
     Returns:
         Infrastructure: The random infrastructure.

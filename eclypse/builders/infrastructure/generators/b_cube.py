@@ -15,7 +15,8 @@ A BCube(k, n) contains:
 - Each server is connected to (k + 1) switches, one per level.
 
 The implementation follows the definition from:
-Guo et al. "BCube: a high performance, server-centric network architecture for modular data centers"
+Guo et al. "BCube: a high performance, server-centric network
+architecture for modular data centers"
 ACM SIGCOMM Computer Communication Review, 2009. https://dl.acm.org/doi/10.1145/1592568.1592577
 """
 
@@ -23,16 +24,15 @@ from __future__ import annotations
 
 from typing import (
     TYPE_CHECKING,
-    Callable,
-    Dict,
-    List,
-    Literal,
-    Optional,
 )
 
 from eclypse.graph import Infrastructure
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Callable,
+    )
+
     import networkx as nx
     from networkx.classes.reportviews import (
         EdgeView,
@@ -41,22 +41,23 @@ if TYPE_CHECKING:
 
     from eclypse.graph.assets import Asset
     from eclypse.placement.strategies import PlacementStrategy
+    from eclypse.utils.types import InitPolicy
 
 
 def b_cube(
     k: int,
     n: int,
     infrastructure_id: str = "b_cube",
-    node_update_policy: Optional[Callable[[NodeView], None]] = None,
-    link_update_policy: Optional[Callable[[EdgeView], None]] = None,
-    node_assets: Optional[Dict[str, Asset]] = None,
-    link_assets: Optional[Dict[str, Asset]] = None,
+    node_update_policy: Callable[[NodeView], None] | None = None,
+    link_update_policy: Callable[[EdgeView], None] | None = None,
+    node_assets: dict[str, Asset] | None = None,
+    link_assets: dict[str, Asset] | None = None,
     include_default_assets: bool = False,
     strict: bool = False,
-    resource_init: Literal["min", "max"] = "max",
-    path_algorithm: Optional[Callable[[nx.Graph, str, str], List[str]]] = None,
-    placement_strategy: Optional[PlacementStrategy] = None,
-    seed: Optional[int] = None,
+    resource_init: InitPolicy = "max",
+    path_algorithm: Callable[[nx.Graph, str, str], list[str]] | None = None,
+    placement_strategy: PlacementStrategy | None = None,
+    seed: int | None = None,
 ) -> Infrastructure:
     """Factory for generating a BCube(k, n) topology.
 
@@ -68,25 +69,25 @@ def b_cube(
         n (int): Number of ports per switch, and number of switches per level.
         infrastructure_id (str): Unique ID for the infrastructure instance.\
             Defaults to "b_cube".
-        node_update_policy (Optional[Callable[[NodeView], None]]): Policy to update nodes.\
+        node_update_policy (Callable[[NodeView], None] | None): Policy to update nodes.\
             Defaults to None.
-        link_update_policy (Optional[Callable[[EdgeView], None]]): Policy to update links.\
+        link_update_policy (Callable[[EdgeView], None] | None): Policy to update links.\
             Defaults to None.
-        node_assets (Optional[Dict[str, Asset]]): Optional default attributes for all nodes.\
+        node_assets (dict[str, Asset] | None): Default attributes for all nodes.\
             Defaults to None.
-        link_assets (Optional[Dict[str, Asset]]): Optional default attributes for all links.\
+        link_assets (dict[str, Asset] | None): Default attributes for all links.\
             Defaults to None.
         include_default_assets (bool): Whether to include default assets. \
             Defaults to False.
         strict (bool): If True, raises an error if the asset values are not \
             consistent with their spaces. Defaults to False.
-        resource_init (Literal["min", "max"]): Initialization policy for resources. \
+        resource_init (InitPolicy): Initialization policy for resources. \
             Defaults to "max".
-        path_algorithm (Optional[Callable[[nx.Graph, str, str], List[str]]]): \
+        path_algorithm (Callable[[nx.Graph, str, str], list[str]] | None): \
             Algorithm to compute paths. Defaults to None.
-        placement_strategy (Optional[PlacementStrategy]): Strategy for resource placement.\
+        placement_strategy (PlacementStrategy | None): Strategy for resource placement.\
             Defaults to None.
-        seed (Optional[int]): Seed for random number generation. Defaults to None.
+        seed (int | None): Seed for random number generation. Defaults to None.
 
     Returns:
         Infrastructure: The BCube topology as an Infrastructure object.
@@ -110,7 +111,7 @@ def b_cube(
     for s in servers:
         infra.add_node(s, strict=strict)
 
-    # Add switches and connect them to servers
+        # Add switches and connect them to servers
     for level in range(k + 1):
         num_switches = n**level
         for sw_idx in range(num_switches):

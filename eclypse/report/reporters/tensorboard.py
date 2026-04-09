@@ -12,12 +12,17 @@ from __future__ import annotations
 from typing import (
     TYPE_CHECKING,
     Any,
-    Generator,
 )
 
 from eclypse.report.reporter import Reporter
+from eclypse.utils.defaults import TENSORBOARD_REPORT_DIR
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Generator,
+    )
+    from pathlib import Path
+
     from tensorboardX import SummaryWriter
 
     from eclypse.workflow.event import EclypseEvent
@@ -26,10 +31,10 @@ if TYPE_CHECKING:
 class TensorBoardReporter(Reporter):
     """Asynchronous reporter for simulation metrics in TensorBoardX format."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, report_path: str | Path):
         """Initialize the TensorBoard reporter."""
-        super().__init__(*args, **kwargs)
-        self.report_path = self.report_path / "tensorboard"
+        super().__init__(report_path)
+        self.report_path = self.report_path / TENSORBOARD_REPORT_DIR
         self._writer = None
 
     async def init(self):
@@ -57,10 +62,12 @@ class TensorBoardReporter(Reporter):
         Args:
             _ (str): The name of the event.
             event_idx (int): The index of the event trigger (step).
-            callback (EclypseEvent): The executed callback containing the data to report.
+            callback (EclypseEvent):
+                The executed callback containing the data to report.
 
         Returns:
-            Generator[Any, None, None]: Tuples with (callback_name, metric_dict, event_idx).
+            Generator[Any, None, None]:
+                Tuples with (callback_name, metric_dict, event_idx).
         """
         if callback.type is None:
             return
@@ -78,7 +85,7 @@ class TensorBoardReporter(Reporter):
 
         Args:
             callback_type (str): The type of the callback (used for organizing plots).
-            data (list[tuple[str, dict[str, float], int]]): List of tuples
+            data (list[tuple[str, dict[str, float], int]]): Tuples
                 containing (callback_name, metric_dict, event_idx).
         """
         for cb_name, metric_dict, step in data:

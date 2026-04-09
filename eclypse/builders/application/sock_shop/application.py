@@ -1,9 +1,10 @@
 # pylint: disable=import-outside-toplevel
 """Factory for the SockShop microservice application.
 
-Defines the SockShop e-commerce demo as an Application object, modeling typical user interactions
-such as browsing, cart updates, checkout, and order tracking. Each microservice is assigned
-realistic compute and performance requirements.
+Defines the SockShop e-commerce demo as an Application object, modelling
+typical user interactions such as browsing, cart updates, checkout, and
+order tracking. Each microservice is assigned realistic compute and
+performance requirements.
 
 Service interactions and structure are based on:
 Sock Shop — A Microservices Demo Application,
@@ -14,51 +15,61 @@ from __future__ import annotations
 
 from typing import (
     TYPE_CHECKING,
-    Callable,
-    Dict,
-    List,
     Literal,
-    Optional,
-    Union,
+    get_args,
 )
 
 from eclypse.graph import Application
 from eclypse.utils.tools import prune_assets
+from eclypse.utils.types import CommunicationInterface
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Callable,
+    )
+
     from networkx.classes.reportviews import (
         EdgeView,
         NodeView,
     )
 
     from eclypse.graph.assets import Asset
+    from eclypse.utils.types import InitPolicy
+
+
+SUPPORTED_COMMUNICATION_INTERFACES = get_args(CommunicationInterface.__value__)
+"""Supported remote communication interfaces for the Sock Shop builders."""
 
 
 def get_sock_shop(
     application_id: str = "SockShop",
-    communication_interface: Optional[Literal["mpi", "rest"]] = None,
-    node_update_policy: Optional[Callable[[NodeView], None]] = None,
-    edge_update_policy: Optional[Callable[[EdgeView], None]] = None,
-    node_assets: Optional[Dict[str, Asset]] = None,
-    edge_assets: Optional[Dict[str, Asset]] = None,
+    communication_interface: CommunicationInterface | None = None,
+    node_update_policy: Callable[[NodeView], None] | None = None,
+    edge_update_policy: Callable[[EdgeView], None] | None = None,
+    node_assets: dict[str, Asset] | None = None,
+    edge_assets: dict[str, Asset] | None = None,
     include_default_assets: bool = False,
-    requirement_init: Literal["min", "max"] = "min",
-    flows: Union[Literal["default"], List[List[str]]] = "default",
-    seed: Optional[int] = None,
+    requirement_init: InitPolicy = "min",
+    flows: Literal["default"] | list[list[str]] = "default",
+    seed: int | None = None,
 ) -> Application:
     """Get the Sock Shop application.
 
     Args:
         application_id (str): The ID of the application.
-        communication_interface (Optional[Literal["mpi", "rest"]]): The communication interface.
-        node_update_policy (Optional[Callable[[NodeView], None]]): A function to update the nodes.
-        edge_update_policy (Optional[Callable[[EdgeView], None]]): A function to update the edges.
-        node_assets (Optional[Dict[str, Asset]]): The assets of the nodes.
-        edge_assets (Optional[Dict[str, Asset]]): The assets of the edges.
-        include_default_assets (bool): Whether to include the default assets. Default is False.
-        requirement_init (Literal["min", "max"]): The initialization of the requirements.
-        flows (Optional[List[List[str]]): The flows of the application.
-        seed (Optional[int]): The seed for the random number generator.
+        communication_interface (CommunicationInterface | None):
+            The communication interface.
+        node_update_policy (Callable[[NodeView], None] | None):
+            A function to update the nodes.
+        edge_update_policy (Callable[[EdgeView], None] | None):
+            A function to update the edges.
+        node_assets (dict[str, Asset] | None): The assets of the nodes.
+        edge_assets (dict[str, Asset] | None): The assets of the edges.
+        include_default_assets (bool):
+            Whether to include the default assets. Default is False.
+        requirement_init (InitPolicy): The initialization of the requirements.
+        flows (Literal["default"] | list[list[str]]): The flows of the application.
+        seed (int | None): The seed for the random number generator.
 
     Returns:
         Application: The Sock Shop application.
@@ -108,7 +119,7 @@ def get_sock_shop(
         def id_fn(service):
             return service
 
-    elif communication_interface in ["mpi", "rest"]:
+    elif communication_interface in SUPPORTED_COMMUNICATION_INTERFACES:
         add_fn = app.add_service  # type: ignore[assignment]
         if communication_interface == "mpi":
             from . import mpi_services as services

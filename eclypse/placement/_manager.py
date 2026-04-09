@@ -1,8 +1,8 @@
-# pylint: disable=protected-access
 """Module for the PlacementManager class.
 
-It manages the placement of applications in the infrastructure and is responsible for
-the mapping phase, where the application services are mapped to the infrastructure nodes.
+It manages the placement of applications in the infrastructure and is
+responsible for the mapping phase, where the application services are
+mapped to the infrastructure nodes.
 """
 
 from __future__ import annotations
@@ -10,11 +10,7 @@ from __future__ import annotations
 from random import shuffle
 from typing import (
     TYPE_CHECKING,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Tuple,
+    Any,
 )
 
 from eclypse.placement import Placement
@@ -23,12 +19,15 @@ from eclypse.utils._logging import logger
 from .view import PlacementView
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Generator,
+    )
+
     from eclypse.graph import (
         Application,
         Infrastructure,
     )
     from eclypse.placement import PlacementStrategy
-    from eclypse.utils._logging import Logger
 
 
 class PlacementManager:
@@ -38,14 +37,15 @@ class PlacementManager:
         """Initializes the PlacementManager.
 
         Args:
-            infrastructure (Infrastructure): The infrastructure to place the applications onto.
+            infrastructure (Infrastructure):
+                The infrastructure to place the applications onto.
         """
         self.infrastructure = infrastructure
-        self.placements: Dict[str, Placement] = {}
+        self.placements: dict[str, Placement] = {}
         self.placement_view: PlacementView = PlacementView(self.infrastructure)
 
     def audit(self):
-        """Check application placements and reset those violating infrastructure constraints.
+        """Check placements and reset those violating infrastructure constraints.
 
         Iterates over the placements of all the involved applications, checking if
         the placement constraints are respected by the infrastructure capabilities.
@@ -59,12 +59,12 @@ class PlacementManager:
                     if n in not_respected:
                         for app in apps:
                             p = self.get(app)
-                            p._to_reset = True
+                            p.mark_for_reset()
 
     def enact(self):
-        """Manage and apply (or reset) the placement of applications on the infrastructure."""
+        """Manage and apply, or reset, application placements."""
         for p in self.placements.values():
-            if p._to_reset:
+            if p.reset_requested:
                 self.logger.warning(f"Resetting placement of {p.application.id}")
                 self.logger.trace(p)
                 p._reset_mapping()
@@ -77,7 +77,7 @@ class PlacementManager:
                 self.logger.log("ECLYPSE", p)
 
     def generate_mapping(self, placement: Placement):
-        """Create application-to-infrastructure mapping based on available placement strategy.
+        """Create application-to-infrastructure mapping from a placement strategy.
 
         Generate the mapping of the applications onto the infrastructure, using the
         placement strategy if available. If no placement strategy is available, the
@@ -121,7 +121,7 @@ class PlacementManager:
 
     def mapping_phase(
         self,
-    ) -> Generator[Tuple[Placement, List[str]], None, None]:
+    ) -> Generator[tuple[Placement, list[str]], None, None]:
         """Executes the mapping phase of the placement.
 
         If the placement is incremental, it will return a generator of tuples containing
@@ -129,9 +129,10 @@ class PlacementManager:
         placement is not incremental, it will return a list of such tuples.
 
         Returns:
-            Generator[Tuple[Placement, List[str]], None, None]:
-                A list of tuples containing the placement and the nodes that are not \
-                respected by the placement, or a generator of such tuples.
+            Generator[tuple[Placement, list[str]], None, None]:
+                A list of tuples containing the placement and the nodes
+                that are not respected by the placement, or a generator
+                of such tuples.
         """
         self.placement_view._reset()
         placements = list(self.placements.values())
@@ -145,13 +146,13 @@ class PlacementManager:
 
             not_respected = self.infrastructure.contains(self.placement_view)
             if not_respected:
-                p._to_reset = True
+                p.mark_for_reset()
             yield (p, not_respected)
 
     def register(
         self,
         application: Application,
-        placement_strategy: Optional[PlacementStrategy] = None,
+        placement_strategy: PlacementStrategy | None = None,
     ):
         """Include an application in the simulation.
 
@@ -186,7 +187,7 @@ class PlacementManager:
         return self.placements[application_id]
 
     @property
-    def logger(self) -> Logger:
+    def logger(self) -> Any:
         """Get a logger for the PlacementManager.
 
         Returns:

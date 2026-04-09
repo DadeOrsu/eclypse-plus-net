@@ -11,7 +11,6 @@ from contextlib import redirect_stderr
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
 )
 
 if TYPE_CHECKING:
@@ -26,11 +25,11 @@ class RayInterface:
         """Initialize the RayInterface."""
         self._backend = None
 
-    def init(self, runtime_env: Dict[str, Any]):
+    def init(self, runtime_env: dict[str, Any]):
         """Initialize the Ray backend with the given runtime environment.
 
         Args:
-            runtime_env (Dict[str, Any]): The runtime environment to use for Ray.
+            runtime_env (dict[str, Any]): The runtime environment to use for Ray.
         """
         self.backend.init(runtime_env=runtime_env)
 
@@ -43,7 +42,7 @@ class RayInterface:
             obj (ObjectRef): The Ray task or list of Ray tasks.
 
         Returns:
-            Union[Any, List[Any]]: The result of the Ray task or list of Ray tasks.
+            Any | list[Any]: The result of the Ray task or list of Ray tasks.
         """
         with (
             open(os.devnull, "w", encoding="utf-8") as devnull,
@@ -88,7 +87,8 @@ class RayInterface:
     def backend(self):
         """Get the Ray backend.
 
-        If the backend is not initialised, it will attempt to import Ray and set it as the backend.
+        If the backend is not initialised, it will attempt to import
+        Ray and set it as the backend.
 
         Returns:
             Any: The Ray backend.

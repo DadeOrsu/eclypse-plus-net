@@ -9,18 +9,19 @@ from __future__ import annotations
 from typing import (
     TYPE_CHECKING,
     Any,
-    Iterable,
-    Set,
 )
 
 from eclypse.report.backend import (
     FrameBackend,
-    get_report_source,
     list_parquet_parts,
     load_jsonl_rows,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Iterable,
+    )
+
     from pandas import DataFrame  # type: ignore[import-untyped]
 
 
@@ -52,23 +53,20 @@ class PandasBackend(FrameBackend):
 
         self._pd = pd
 
-    def read_frame(self, stats_path, report_type: str, report_format: str) -> DataFrame:
-        """Read a report into a pandas DataFrame."""
-        source = get_report_source(stats_path, report_type, report_format)
+    def _read_csv(self, source) -> DataFrame:
+        """Read a CSV report into a pandas DataFrame."""
+        return self._pd.read_csv(source, converters={"value": _to_float})
 
-        if report_format == "csv":
-            return self._pd.read_csv(source, converters={"value": _to_float})
+    def _read_parquet(self, source) -> DataFrame:
+        """Read partitioned parquet data into a pandas DataFrame."""
+        return self._pd.concat(
+            [self._pd.read_parquet(part) for part in list_parquet_parts(source)],
+            ignore_index=True,
+        )
 
-        if report_format == "parquet":
-            return self._pd.concat(
-                [self._pd.read_parquet(part) for part in list_parquet_parts(source)],
-                ignore_index=True,
-            )
-
-        if report_format == "json":
-            return self._pd.DataFrame(load_jsonl_rows(source, report_type))
-
-        raise ValueError(f"Unsupported report format: {report_format}")
+    def _read_json(self, source, report_type: str) -> DataFrame:
+        """Read JSONL report data into a pandas DataFrame."""
+        return self._pd.DataFrame(load_jsonl_rows(source, report_type))
 
     def is_empty(self, df: DataFrame) -> bool:
         """Return whether the DataFrame is empty.
@@ -81,7 +79,7 @@ class PandasBackend(FrameBackend):
         """
         return df.empty
 
-    def columns(self, df: DataFrame) -> Set[str]:
+    def columns(self, df: DataFrame) -> set[str]:
         """Return the set of column names.
 
         Args:

@@ -16,13 +16,16 @@ from abc import (
 )
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Any,
-    Iterable,
-    List,
-    Set,
 )
 
-from eclypse.report._schema import DEFAULT_REPORT_HEADERS
+from eclypse.report.schema import DEFAULT_REPORT_HEADERS
+
+if TYPE_CHECKING:
+    from collections.abc import (
+        Iterable,
+    )
 
 
 class FrameBackend(ABC):
@@ -40,7 +43,6 @@ class FrameBackend(ABC):
         """
         self._name = name
 
-    @abstractmethod
     def read_frame(self, stats_path: Path, report_type: str, report_format: str) -> Any:
         """Read a report into a backend-specific DataFrame.
 
@@ -52,6 +54,28 @@ class FrameBackend(ABC):
         Returns:
             A backend-specific DataFrame instance.
         """
+        source = get_report_source(stats_path, report_type, report_format)
+        if report_format == "csv":
+            return self._read_csv(source)
+        if report_format == "parquet":
+            return self._read_parquet(source)
+        if report_format == "json":
+            return self._read_json(source, report_type)
+        raise ValueError(f"Unsupported report format: {report_format}")
+
+    @abstractmethod
+    def _read_csv(self, source: Path) -> Any:
+        """Read a CSV report source."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def _read_parquet(self, source: Path) -> Any:
+        """Read a parquet report source."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def _read_json(self, source: Path, report_type: str) -> Any:
+        """Read a JSONL report source."""
         raise NotImplementedError
 
     @abstractmethod
@@ -67,7 +91,7 @@ class FrameBackend(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def columns(self, df: Any) -> Set[str]:
+    def columns(self, df: Any) -> set[str]:
         """Return the set of column names.
 
         Args:
@@ -161,7 +185,7 @@ class FrameBackend(ABC):
         return self._name
 
 
-def get_report_columns(report_type: str) -> List[str]:
+def get_report_columns(report_type: str) -> list[str]:
     """Return the expected tabular columns for a report type."""
     return DEFAULT_REPORT_HEADERS[report_type]
 
@@ -178,7 +202,7 @@ def get_report_source(stats_path: Path, report_type: str, report_format: str) ->
     raise ValueError(f"Unsupported report format: {report_format}")
 
 
-def list_parquet_parts(path: Path) -> List[Path]:
+def list_parquet_parts(path: Path) -> list[Path]:
     """List parquet part files under a report directory."""
     path = Path(path)
     parts = sorted(path.rglob("*.parquet"))
@@ -187,13 +211,13 @@ def list_parquet_parts(path: Path) -> List[Path]:
     return parts
 
 
-def load_jsonl_rows(path: Path, report_type: str) -> List[dict[str, Any]]:
+def load_jsonl_rows(path: Path, report_type: str) -> list[dict[str, Any]]:
     """Load JSONL report entries and normalise them into tabular rows."""
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f'No JSONL file found at "{path}".')
 
-    rows: List[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     columns = get_report_columns(report_type)
     payload_columns = columns[4:]
 

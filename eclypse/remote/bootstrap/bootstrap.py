@@ -6,12 +6,13 @@ It contains the configuration for the remote infrastructure.
 
 from __future__ import annotations
 
+from dataclasses import (
+    dataclass,
+    field,
+)
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    Optional,
-    Type,
 )
 
 from eclypse.remote import ray_backend
@@ -25,49 +26,45 @@ if TYPE_CHECKING:
     from eclypse.simulation.config import SimulationConfig
 
 
+@dataclass(slots=True, init=False)
 class RemoteBootstrap:
     """Configuration for the remote infrastructure."""
 
+    _sim_class: type[Any] = field(repr=False)
+    _node_class: type[Any] = field(repr=False)
+    ray_options_factory: RayOptionsFactory
+    env_vars: dict[str, str]
+    node_args: dict[str, Any]
+
     def __init__(
         self,
-        sim_class: Optional[Type[RemoteSimulator]] = None,
-        node_class: Optional[Type[RemoteNode]] = None,
-        ray_options_factory: Optional[RayOptionsFactory] = None,
-        # resume_if_exists: bool = False,
+        sim_class: type[RemoteSimulator] | None = None,
+        node_class: type[RemoteNode] | None = None,
+        ray_options_factory: RayOptionsFactory | None = None,
         **node_args,
     ):
         """Create a new RemoteBootstrap.
 
         Args:
-            sim_class (Optional[Type[RemoteSimulator]]): The remote simulator class.
-            node_class (Optional[Type[RemoteNode]]): The remote node class.
-            ray_options_factory (Optional[RayOptionsFactory]): The Ray options factory.
-            resume_if_exists (bool): Whether to resume the simulation if it exists.
+            sim_class (type[RemoteSimulator] | None): The remote simulator class.
+            node_class (type[RemoteNode] | None): The remote node class.
+            ray_options_factory (RayOptionsFactory | None): The Ray options factory.
             **node_args: The arguments for the remote node.
         """
-        self._sim_class = sim_class if sim_class else "sim-core"
-        self._node_class = node_class if node_class else "node-core"
+        self._sim_class = sim_class or _get_default_remote_simulator_class()
+        self._node_class = node_class or _get_default_remote_node_class()
         self.ray_options_factory = (
             ray_options_factory if ray_options_factory else RayOptionsFactory()
         )
-        # self.resume_if_exists = resume_if_exists
-
-        self.env_vars: Dict[str, str] = {}
+        self.env_vars = {}
         self.node_args = node_args
 
     def build(
         self,
         infrastructure: Infrastructure,
-        simulation_config: Optional[SimulationConfig] = None,
+        simulation_config: SimulationConfig | None = None,
     ):
         """Build the remote simulation."""
-        # if self.resume_if_exists:
-        #     ray.init(address="auto", runtime_env={"env_vars": self.env_vars})
-        #     return ray.get_actor(f"{infrastructure.id}/manager"), [
-        #         ray.get_actor(f"{infrastructure.id}/{node}")
-        #         for node in infrastructure.nodes
-        #     ]
-
         ray_backend.init(runtime_env={"env_vars": self.env_vars})
 
         remote_nodes = [
@@ -92,7 +89,11 @@ class RemoteBootstrap:
 
 
 def _create_remote(
-    name: str, remote_cls: Any, options_factory: RayOptionsFactory, *args, **kwargs
+    name: str,
+    remote_cls: type[Any],
+    options_factory: RayOptionsFactory,
+    *args,
+    **kwargs,
 ) -> Any:
     """Create a remote object.
 
@@ -106,15 +107,22 @@ def _create_remote(
     Returns:
         Any: The remote object.
     """
-    if remote_cls == "sim-core":
-        from eclypse.simulation._simulator import (  # isort:skip
-            RemoteSimulator as remote_cls,
-        )
-    elif remote_cls == "node-core":
-        from eclypse.remote._node import RemoteNode as remote_cls
-
     return (
         ray_backend.remote(remote_cls)
         .options(**options_factory(name))
         .remote(*args, **kwargs)
     )
+
+
+def _get_default_remote_simulator_class() -> type[Any]:
+    """Return the default remote simulator class."""
+    from eclypse.simulation._simulator import RemoteSimulator
+
+    return RemoteSimulator
+
+
+def _get_default_remote_node_class() -> type[Any]:
+    """Return the default remote node class."""
+    from eclypse.remote._node import RemoteNode
+
+    return RemoteNode

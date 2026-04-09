@@ -1,62 +1,39 @@
-"""Module containing type aliases used throughout the ECLYPSE package.
-
-Attributes:
-    PrimitiveType (Union): Type alias for primitive types.\
-        Possible values are ``int``, ``float``, ``str``, ``bool``, ``list``,\
-        ``tuple``, ``dict``, ``set``.
-    CascadeTriggerType (Union): Type alias for cascade trigger types.\
-        Possible values are:
-        - ``str``: CascadeTrigger
-        - ``Tuple[str, int]``: PeriodicCascadeTrigger
-        - ``Tuple[str, List[int]]``: ScheduledCascadeTrigger
-        - ``Tuple[str, float]``: RandomCascadeTrigger
-    ActivatesOnType (Union): Type alias for the activates on types.\
-        It can be a single `CascadeTriggerType` or a list of them.
-    HTTPMethodLiteral (Literal): Literal type for HTTP methods.\
-        Possible values are ``"GET"``, ``"POST"``, ``"PUT"``, ``"DELETE"``.
-    ConnectivityFn (Callable): Type alias for the connectivity function.\
-        It takes two lists of strings and returns a generator of tuples of strings.
-    EventType (Literal): Literal type for the event types.\
-        Possible values are ``"application"``, ``"infrastructure"``, ``"service"``,\
-        ``"interaction"``, ``"node"``, ``"link"``, ``"simulation"``.
-    LogLevel (Literal): Literal type for the log levels.\
-        Possible values are ``"TRACE"``, ``"DEBUG"``, ``"ECLYPSE"``, ``"INFO"``,\
-        ``"SUCCESS"``, ``"WARNING"``, ``"ERROR"``, ``"CRITICAL"``.
-"""
+"""Shared type aliases used throughout ECLYPSE."""
 
 from __future__ import annotations
 
-from typing import (
+from collections.abc import (
     Callable,
     Generator,
-    List,
-    Literal,
-    Tuple,
-    Union,
 )
+from typing import Literal
 
-PrimitiveType = Union[int, float, str, bool, list, tuple, dict, set]
+type PrimitiveType = int | float | str | bool | list | tuple | dict | set
+"""Type alias for primitive serialisable values used in payloads and assets."""
 
-CascadeTriggerType = Union[
-    str,  # CascadeTrigger
-    Tuple[str, int],  # PeriodicCascadeTrigger
-    Tuple[str, List[int]],  # ScheduledCascadeTrigger
-    Tuple[str, float],  # RandomCascadeTrigger
+type CascadeTriggerType = (
+    str | tuple[str, int] | tuple[str, list[int]] | tuple[str, float]
+)
+"""Type alias describing the supported cascade-trigger declarations."""
+
+type ActivatesOnType = CascadeTriggerType | list[CascadeTriggerType]
+"""Type alias for one or more activation declarations."""
+
+type TriggerCondition = Literal["any", "all"]
+"""Type alias for the condition used to combine trigger states."""
+
+type HTTPMethodLiteral = Literal["GET", "POST", "PUT", "DELETE"]
+"""Type alias for supported HTTP methods."""
+
+type CommunicationInterface = Literal["mpi", "rest"]
+"""Type alias for the supported remote communication interfaces."""
+
+type ConnectivityFn = Callable[
+    [list[str], list[str]], Generator[tuple[str, str], None, None]
 ]
-ActivatesOnType = Union[CascadeTriggerType, List[CascadeTriggerType]]
+"""Type alias for functions generating graph connectivity pairs."""
 
-HTTPMethodLiteral = Literal[
-    "GET",
-    "POST",
-    "PUT",
-    "DELETE",
-]
-
-ConnectivityFn = Callable[
-    [List[str], List[str]], Generator[Tuple[str, str], None, None]
-]
-
-EventType = Literal[
+type EventType = Literal[
     "application",
     "infrastructure",
     "service",
@@ -65,14 +42,18 @@ EventType = Literal[
     "link",
     "simulation",
 ]
+"""Type alias for the supported event target scopes."""
 
-ReportFormat = Literal[
-    "csv",
-    "parquet",
-    "json",
-]
+type InitPolicy = Literal["min", "max"]
+"""Type alias for resource and requirement initialisation policies."""
 
-LogLevel = Literal[
+type ReportFormat = Literal["csv", "parquet", "json"]
+"""Type alias for the supported report storage formats."""
+
+type ReportBackend = Literal["pandas", "polars", "polars_lazy"]
+"""Type alias for the supported frame backends used by reports."""
+
+type LogLevel = Literal[
     "TRACE",
     "DEBUG",
     "ECLYPSE",
@@ -82,3 +63,4 @@ LogLevel = Literal[
     "ERROR",
     "CRITICAL",
 ]
+"""Type alias for the supported logger levels."""

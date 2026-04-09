@@ -9,17 +9,15 @@ from functools import cached_property
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Union,
 )
 
 from eclypse.remote import ray_backend
 
 if TYPE_CHECKING:
     from asyncio import Future
+    from collections.abc import (
+        Generator,
+    )
     from datetime import timedelta
 
     from ray import ObjectRef
@@ -30,33 +28,42 @@ if TYPE_CHECKING:
     from .route import Route
 
 
+class RouteNotFoundError(RuntimeError):
+    """Raised when no route can be found for a remote service request."""
+
+    def __init__(self, recipient_id: str):
+        """Create an error describing the recipient that could not be reached."""
+        self.recipient_id = recipient_id
+        super().__init__(f"Route to {recipient_id} not found")
+
+
 class EclypseRequest:
     """Class for an Eclypse request."""
 
     def __init__(
         self,
-        recipient_ids: List[str],
-        data: Dict[str, Any],
+        recipient_ids: list[str],
+        data: dict[str, Any],
         _comm: EclypseCommunicationInterface,
-        timestamp: Optional[datetime] = None,
+        timestamp: datetime | None = None,
     ):
         """Create a new EclypseRequest.
 
         Args:
-            recipient_ids (List[str]): The ids of the recipients.
-            data (Dict[str, Any]): The data of the request.
+            recipient_ids (list[str]): The ids of the recipients.
+            data (dict[str, Any]): The data of the request.
             _comm (EclypseCommunicationInterface): The communication interface.
-            timestamp (Optional[datetime], optional): The timestamp of the request.
+            timestamp (datetime | None, optional): The timestamp of the request.
                 Defaults to None.
         """
         self._data = data
         self._timestamp = timestamp if timestamp is not None else datetime.now()
 
-        self._recipient_ids: List[str] = recipient_ids
-        self._routes: List[Future[Route]] = [
+        self._recipient_ids: list[str] = recipient_ids
+        self._routes: list[Future[Route]] = [
             asyncio.wrap_future(
                 _comm.request_route(recipient_id).future(),  # type: ignore[attr-defined]
-                loop=_comm.service._node.engine_loop,  # type: ignore[union-attr]
+                loop=_comm.service.node.engine_loop,
             )
             for recipient_id in self._recipient_ids
         ]
@@ -67,7 +74,7 @@ class EclypseRequest:
                     _process_request(
                         self.data, self._ref_args, route, recipient_id, _comm
                     ),
-                    loop=_comm.service._node.engine_loop,  # type: ignore[union-attr]
+                    loop=_comm.service.node.engine_loop,
                 )
             )
             for route, recipient_id in zip(
@@ -89,11 +96,11 @@ class EclypseRequest:
         return wrapper(self).__await__()
 
     @property
-    def data(self) -> Dict[str, Any]:
+    def data(self) -> dict[str, Any]:
         """Get the data of the request.
 
         Returns:
-            Dict[str, Any]: The data.
+            dict[str, Any]: The data.
         """
         return self._data
 
@@ -107,16 +114,16 @@ class EclypseRequest:
         return self._timestamp
 
     @property
-    def recipient_ids(self) -> List[str]:
+    def recipient_ids(self) -> list[str]:
         """The ids of the recipients.
 
         Returns:
-            List[str]: The ids.
+            list[str]: The ids.
         """
         return self._recipient_ids
 
     @property
-    def routes(self) -> List[Optional[Route]]:
+    def routes(self) -> list[Route | None]:
         """Wait for the routes to be computed.
 
         This method can be awaited explicitly to
@@ -126,25 +133,25 @@ class EclypseRequest:
         return [(r.result() if r.done() else None) for r in self._routes]
 
     @property
-    def responses(self) -> List[Optional[Any]]:
+    def responses(self) -> list[Any | None]:
         """Wait for the responses to the MPI request.
 
-        This method can be called explicitly to wait for the responses to the EclypseRequest
-        Otherwise, it is called implicitly when the `EclypseRequest` object is awaited to
-        process the request.
+        This method can be called explicitly to wait for the responses
+        to the EclypseRequest. Otherwise, it is called implicitly when
+        the `EclypseRequest` object is awaited to process the request.
         """
         return [(f.result()["future"] if f.done() else None) for f in self._futures]
 
     @property
-    def elapsed_times(self) -> List[Optional[timedelta]]:
+    def elapsed_times(self) -> list[timedelta | None]:
         """The elapsed times until the responses were received.
 
         Returns:
-            List[timedelta]: The elapsed times until the responses were received.
+            list[timedelta]: The elapsed times until the responses were received.
                 If a response is not yet available, a timedelta of 0 is returned
                 for the corresponding recipient.
         """
-        times: List[Optional[timedelta]] = []
+        times: list[timedelta | None] = []
         for r in self._futures:
             if r.done():
                 times.append(r.result()["timestamp"] - self.timestamp)
@@ -153,34 +160,31 @@ class EclypseRequest:
         return times
 
     @cached_property
-    def _ref_args(self) -> Dict[str, ObjectRef]:
+    def _ref_args(self) -> dict[str, ObjectRef]:
         return {k: ray_backend.put(v) for k, v in self.data.items()}
 
 
 async def _process_request(
-    args: Dict[str, Any],
-    args_ref: Dict[str, ObjectRef],
+    args: dict[str, Any],
+    args_ref: dict[str, ObjectRef],
     route: Future[Route],
     recipient_id: str,
     _comm: EclypseCommunicationInterface,
-) -> Dict[str, Union[Any, datetime]]:
+) -> dict[str, Any | datetime]:
     _route = route.result() if route.done() else await route
     if _route is None:
-        raise RuntimeError(f"Route to {recipient_id} not found")
+        raise RouteNotFoundError(recipient_id)
 
     if _route.no_hop:
-        future = _comm.service._node.service_comm_entrypoint(  # type: ignore[union-attr]
+        future = _comm.service.node.service_comm_entrypoint(
             _route,
             _comm.__class__,
             **args,
         )
     else:
-        infrastructure_id = _comm.service._node.infrastructure_id  # type: ignore[union-attr]
+        infrastructure_id = _comm.service.infrastructure_id
         actor_name = f"{infrastructure_id}/{_route.recipient_node_id}"
-        actor_cache = _comm.service._node._actor_cache  # type: ignore[union-attr]
-        if actor_name not in actor_cache:
-            actor_cache[actor_name] = ray_backend.get_actor(actor_name)
-        handle: RemoteNode = actor_cache[actor_name]
+        handle: RemoteNode = _comm.service.node.get_actor(actor_name)
         await asyncio.sleep(_route.cost(args))
         future = handle.service_comm_entrypoint.remote(  # type: ignore[attr-defined]
             _route,

@@ -8,12 +8,6 @@ from __future__ import annotations
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Dict,
-    List,
-    Literal,
-    Optional,
-    Union,
 )
 
 from eclypse.utils.constants import MAX_FLOAT
@@ -27,12 +21,20 @@ from eclypse.workflow.trigger.cascade import (
     ScheduledCascadeTrigger,
 )
 
-from .event import EclypseEvent
+from .event import (
+    EclypseEvent,
+)
+from .role import EventRole
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Callable,
+    )
+
     from eclypse.utils.types import (
         ActivatesOnType,
         EventType,
+        TriggerCondition,
     )
     from eclypse.workflow.trigger.trigger import Trigger
 
@@ -48,14 +50,14 @@ class EventWrapper(EclypseEvent):
         self,
         event_fn: Callable,
         name: str,
-        triggers: List[Trigger],
-        activates_on: Optional[ActivatesOnType] = None,
-        event_type: Optional[EventType] = None,
-        trigger_every_ms: Optional[float] = None,
+        triggers: list[Trigger],
+        activates_on: ActivatesOnType | None = None,
+        event_type: EventType | None = None,
+        trigger_every_ms: float | None = None,
         max_triggers: int = int(MAX_FLOAT),
-        trigger_condition: Literal["any", "all"] = "any",
-        is_callback: bool = False,
-        report: Optional[Union[str, List[str]]] = None,
+        trigger_condition: TriggerCondition = "any",
+        role: EventRole = EventRole.EVENT,
+        report: str | list[str] | None = None,
         remote: bool = False,
         verbose: bool = False,
     ):
@@ -64,20 +66,20 @@ class EventWrapper(EclypseEvent):
         Args:
             event_fn (Callable): The function to wrap as an event.
             name (str): The name of the event.
-            triggers (List[Trigger]): The list of triggers that will trigger the event.
-            activates_on (Optional[ActivatesOnType], optional): The conditions that will
+            triggers (list[Trigger]): The list of triggers that will trigger the event.
+            activates_on (ActivatesOnType | None, optional): The conditions that will
                 trigger the metric. Defaults to None.
-            event_type (Optional[EventType], optional): The type of the event. \
+            event_type (EventType | None, optional): The type of the event. \
                 Defaults to None.
-            trigger_every_ms (Optional[float], optional): The time in milliseconds \
+            trigger_every_ms (float | None, optional): The time in milliseconds \
                 between each trigger of the event. Defaults to None.
-            max_triggers (Optional[int], optional): The maximum number of times the \
+            max_triggers (int | None, optional): The maximum number of times the \
                 event can be triggered. Defaults to None.
-            trigger_condition (Optional[str], optional): The condition for the triggers\
+            trigger_condition (str | None, optional): The condition for the triggers\
                 to fire the event. Defaults to "any".
-            is_callback (bool, optional): Whether the event is a callback. \
-                Defaults to False.
-            report (Optional[Union[str, List[str]]], optional): The type of report \
+            role (EventRole, optional): The workflow role assigned to the event.
+                Defaults to EventRole.EVENT.
+            report (str | list[str] | None, optional): The type of report \
                 to generate for the event. Defaults to None.
             remote (bool, optional): Whether the event is remote. Defaults to False.
             verbose (bool, optional): Whether to enable verbose logging. \
@@ -99,7 +101,7 @@ class EventWrapper(EclypseEvent):
                 ):
                     raise ValueError(
                         "Invalid tuple format for activates_on.\
-                        Expected (str, int), (str, List[int]), or (str, float)."
+                        Expected (str, int), (str, list[int]), or (str, float)."
                     )
                 if isinstance(e[1], int):
                     triggers.append(PeriodicCascadeTrigger(e[0], e[1]))
@@ -120,7 +122,7 @@ class EventWrapper(EclypseEvent):
             triggers=triggers,
             trigger_condition=trigger_condition,
             max_triggers=max_triggers,
-            is_callback=is_callback,
+            role=role,
             event_type=event_type,
             report=report,
             remote=remote,
@@ -128,7 +130,7 @@ class EventWrapper(EclypseEvent):
         )
         self._event_fn = event_fn
 
-    def __call__(self, *args, **kwargs) -> Dict[str, Any]:
+    def __call__(self, *args, **kwargs) -> dict[str, Any]:
         """Call the wrapped event function."""
         return self._event_fn(*args, **kwargs)
 

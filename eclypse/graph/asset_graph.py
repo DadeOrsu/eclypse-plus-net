@@ -14,12 +14,6 @@ import random as rnd
 from copy import deepcopy
 from typing import (
     TYPE_CHECKING,
-    Callable,
-    Dict,
-    List,
-    Literal,
-    Optional,
-    Union,
 )
 
 import networkx as nx
@@ -31,6 +25,10 @@ from eclypse.utils._logging import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Callable,
+    )
+
     from networkx.classes.reportviews import (
         EdgeView,
         NodeView,
@@ -38,6 +36,7 @@ if TYPE_CHECKING:
 
     from eclypse.graph.assets import Asset
     from eclypse.utils._logging import Logger
+    from eclypse.utils.types import InitPolicy
 
 
 class AssetGraph(nx.DiGraph):
@@ -46,34 +45,35 @@ class AssetGraph(nx.DiGraph):
     def __init__(
         self,
         graph_id: str,
-        node_assets: Optional[Dict[str, Asset]] = None,
-        edge_assets: Optional[Dict[str, Asset]] = None,
-        node_update_policy: Optional[
-            Union[Callable[[NodeView], None], List[Callable[[NodeView], None]]]
-        ] = None,
-        edge_update_policy: Optional[
-            Union[Callable[[EdgeView], None], List[Callable[[EdgeView], None]]]
-        ] = None,
-        attr_init: Literal["min", "max"] = "min",
+        node_assets: dict[str, Asset] | None = None,
+        edge_assets: dict[str, Asset] | None = None,
+        node_update_policy: Callable[[NodeView], None]
+        | list[Callable[[NodeView], None]]
+        | None = None,
+        edge_update_policy: Callable[[EdgeView], None]
+        | list[Callable[[EdgeView], None]]
+        | None = None,
+        attr_init: InitPolicy = "min",
         flip_assets: bool = False,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ):
         """Initializes the AssetGraph object.
 
         Args:
             graph_id (str): The ID of the graph.
-            node_assets (Optional[Dict[str, Asset]], optional): The assets of the nodes.\
-                Defaults to None.
-            edge_assets (Optional[Dict[str, Asset]], optional): The assets of the edges.\
-                Defaults to None.
-            node_update_policy (Optional[Union[Callable, List[Callable]]]): The policy \
-                to update the nodes. Defaults to None.
-            edge_update_policy (Optional[Union[Callable, List[Callable]]]): The policy \
-                to update the edges. Defaults to None.
-            attr_init (Literal["min", "max"], optional): The initialization policy for the\
-                assets. Defaults to "min".
+            node_assets (dict[str, Asset] | None, optional):
+                The assets of the nodes. Defaults to None.
+            edge_assets (dict[str, Asset] | None, optional):
+                The assets of the edges. Defaults to None.
+            node_update_policy (Callable | list[Callable] | None):
+                The policy to update the nodes. Defaults to None.
+            edge_update_policy (Callable | list[Callable] | None):
+                The policy to update the edges. Defaults to None.
+            attr_init (InitPolicy, optional):
+                The initialization policy for the assets. Defaults to
+                "min".
             flip_assets (bool, optional): Whether to flip the assets. Defaults to False.
-            seed (Optional[int], optional): The seed for the random number generator.
+            seed (int | None, optional): The seed for the random number generator.
                 Defaults to None.
         """
         self.rnd = rnd.Random(seed)
@@ -129,9 +129,10 @@ class AssetGraph(nx.DiGraph):
         It also checks if the assets values are consistent with their spaces.
 
         Args:
-            node_for_adding (Optional[str], optional): The node to add. Defaults to None.
+            node_for_adding (str | None, optional): The node to add. Defaults to None.
             **assets: The assets of the node.
-            strict (bool, optional): If True, raises an error if the assets are inconsistent.
+            strict (bool, optional):
+                If True, raises an error if the assets are inconsistent.
                 If False, logs a warning. Defaults to True.
 
         Raises:
@@ -169,7 +170,8 @@ class AssetGraph(nx.DiGraph):
             v_of_edge (str): The target node.
             symmetric (bool, optional): If True, adds the edge in both directions.
                 Defaults to False.
-            strict (bool, optional): If True, raises an error if the assets are inconsistent.
+            strict (bool, optional):
+                If True, raises an error if the assets are inconsistent.
                 If False, logs a warning. Defaults to True.
             **assets: The assets of the edge.
 

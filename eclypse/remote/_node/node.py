@@ -1,4 +1,3 @@
-# pylint: disable=protected-access
 """Module for the RemoteEngine class.
 
 It represents a node in the infrastructure, during a remote simulation.
@@ -17,12 +16,9 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Dict,
-    Optional,
-    Type,
 )
 
+from eclypse.remote import ray_backend
 from eclypse.remote.communication.mpi import EclypseMPI
 from eclypse.remote.communication.rest import EclypseREST
 from eclypse.utils._logging import (
@@ -34,10 +30,13 @@ from eclypse.utils.constants import RND_SEED
 from .ops_thread import RemoteOpsThread
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Callable,
+    )
+
     from eclypse.remote.communication import Route
     from eclypse.remote.service import Service
     from eclypse.remote.utils import RemoteOps
-    from eclypse.utils._logging import Logger
 
 
 class RemoteNode:
@@ -62,8 +61,8 @@ class RemoteNode:
 
         self._engine_ops_thread = RemoteOpsThread(self, self._engine_loop)
         self._thread_pool_fn = ThreadPoolExecutor()
-        self._services: Dict[str, Service] = {}
-        self._actor_cache: Dict[str, Any] = {}
+        self._services: dict[str, Service] = {}
+        self._actor_cache: dict[str, Any] = {}
 
         rnd.seed(os.getenv(RND_SEED))
         config_logger()  # re-do for remote node
@@ -115,7 +114,7 @@ class RemoteNode:
 
     async def entrypoint(
         self,
-        service_id: Optional[str],
+        service_id: str | None,
         fn: Callable,
         **fn_args,
     ) -> Any:
@@ -133,29 +132,29 @@ class RemoteNode:
         return await future
 
     async def service_comm_entrypoint(
-        self, route: Route, comm_interface: Type, **handle_args
+        self, route: Route, communication_interface: type, **handle_args
     ) -> Any:
-        """Entry point for the communication interface of a service deployed in the node.
+        """Entry point for the communication interface of a deployed service.
 
         It is used to allow the interaction among services by leveraging the Ray
         Actor's remote method invocation.
 
         Args:
             route (Route): The route of the communication.
-            comm_interface (Type): The communication interface to be used.
+            communication_interface (Type): The communication interface to be used.
             **handle_args: The arguments for handling the request.
         """
         service_id = route.recipient_id
 
-        if comm_interface == EclypseMPI:
+        if communication_interface == EclypseMPI:
             return await self.services[service_id].mpi._handle_request(
                 route=route, **handle_args
             )
-        if comm_interface == EclypseREST:
+        if communication_interface == EclypseREST:
             return await self.services[service_id].rest._handle_request(
                 route=route, **handle_args
             )
-        raise ValueError(f"Invalid communication interface: {comm_interface}.")
+        raise ValueError(f"Invalid communication interface: {communication_interface}.")
 
     def __repr__(self) -> str:
         return f"{self.id}"
@@ -171,7 +170,18 @@ class RemoteNode:
         return self._infrastructure_id
 
     @property
-    def services(self) -> Dict[str, Service]:
+    def manager_actor_name(self) -> str:
+        """Return the actor name of the remote simulator managing this node."""
+        return f"{self.infrastructure_id}/manager"
+
+    def get_actor(self, actor_name: str) -> Any:
+        """Return a cached Ray actor handle by name."""
+        if actor_name not in self._actor_cache:
+            self._actor_cache[actor_name] = ray_backend.get_actor(actor_name)
+        return self._actor_cache[actor_name]
+
+    @property
+    def services(self) -> dict[str, Service]:
         """Returns the dictionary of services deployed in the node."""
         return self._services
 
@@ -181,6 +191,6 @@ class RemoteNode:
         return self._engine_loop
 
     @property
-    def logger(self) -> Logger:
+    def logger(self) -> Any:
         """Returns the logger of the node."""
         return self._logger.bind(id=self.id)
