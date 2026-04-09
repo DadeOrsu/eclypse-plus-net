@@ -63,6 +63,7 @@ class Network(Infrastructure):
         queuing parameters (bandwidth in bps, latency, propagation, processing).
         """
         attr['parameters'] = bandwidth_mbps * 1_000_000
+        attr['bandwidth_mbps'] = bandwidth_mbps
         attr['length_km'] = length_km
         attr['propagation_speed_km_s'] = propagation_speed_km_s
         attr['processing_delay_s'] = processing_delay_s
@@ -104,6 +105,7 @@ class Network(Infrastructure):
         # delay calculations using packet.size
         L = packet.size * 8
         R = edge_data.get("bandwidth_mbps", MIN_BANDWIDTH)
+        R = R * 1_000_000
         d_trans_theoretical = L / R if R > 0 else 0.0
         d_trans = random.expovariate(1.0 / d_trans_theoretical) if d_trans_theoretical > 0 else 0.0
 
