@@ -22,7 +22,10 @@ import networkx as nx
 from networkx.classes.filters import no_filter
 
 from eclypse.graph import AssetGraph
-from eclypse.utils._logging import log_placement_violations
+from eclypse.utils._logging import (
+    format_log_kv,
+    log_placement_violations,
+)
 from eclypse.utils.constants import (
     COST_RECOMPUTATION_THRESHOLD,
     MIN_FLOAT,
@@ -36,18 +39,14 @@ from .assets.defaults import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import (
-        Callable,
-    )
-
-    from networkx.classes.reportviews import (
-        EdgeView,
-        NodeView,
-    )
+    from collections.abc import Callable
 
     from eclypse.graph.assets.asset import Asset
     from eclypse.placement.strategies import PlacementStrategy
-    from eclypse.utils.types import InitPolicy
+    from eclypse.utils.types import (
+        InitPolicy,
+        UpdatePolicies,
+    )
 
 
 class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
@@ -57,12 +56,7 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
         self,
         infrastructure_id: str = "Infrastructure",
         placement_strategy: PlacementStrategy | None = None,
-        node_update_policy: Callable[[NodeView], None]
-        | list[Callable[[NodeView], None]]
-        | None = None,
-        edge_update_policy: Callable[[EdgeView], None]
-        | list[Callable[[EdgeView], None]]
-        | None = None,
+        update_policies: UpdatePolicies = None,
         node_assets: dict[str, Asset] | None = None,
         edge_assets: dict[str, Asset] | None = None,
         include_default_assets: bool = False,
@@ -77,10 +71,8 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
             infrastructure_id (str): The ID of the infrastructure.
             placement_strategy (PlacementStrategy | None): The placement \
                 strategy to use.
-            node_update_policy (Callable | list[Callable] | None):\
-                A function to update the nodes. Defaults to None.
-            edge_update_policy (Callable | list[Callable] | None):\
-                A function to update the edges. Defaults to None.
+            update_policies (Callable | list[Callable] | None):\
+                Graph update policies executed during ``evolve()``.
             node_assets (dict[str, Asset] | None): The assets of the nodes.
             edge_assets (dict[str, Asset] | None): The assets of the edges.
             include_default_assets (bool): Whether to include the default assets. \
@@ -100,8 +92,7 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
 
         super().__init__(
             graph_id=infrastructure_id,
-            node_update_policy=node_update_policy,
-            edge_update_policy=edge_update_policy,
+            update_policies=update_policies,
             node_assets=_node_assets,
             edge_assets=_edge_assets,
             attr_init=resource_init,
@@ -145,6 +136,11 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
         self._costs: dict[str, dict[str, list[tuple[str, str, Any]]]] = {}
         self._path_resources: dict[str, dict[str, dict[str, Any]]] = {}
         self._processing_times: dict[str, dict[str, float]] = {}
+
+    def evolve(self):
+        """Update the infrastructure and invalidate derived path caches."""
+        super().evolve()
+        self._invalidate_cache()
 
     def add_node(self, node_for_adding: str, strict: bool = False, **assets: Any):
         """Add a node and invalidate the path cache.
@@ -208,24 +204,30 @@ class Infrastructure(AssetGraph):  # pylint: disable=too-few-public-methods
             other (Infrastructure): The Infrastructure to compare with.
 
         Returns:
-            list[str]: A list of nodes whose requirements are not respected or \
+            list[str]: A list of nodes whose requirements are not respected or
                 whose connected links are not respected.
         """
         not_respected = set()
         for n, req in other.nodes(data=True):
             res = self.nodes[n]
             node_violations = self.node_assets.satisfies(res, req, violations=True)
-            if node_violations:
-                self.logger.warning(f'Node "{n}" not respected:')
-                log_placement_violations(self.logger, node_violations)  # type: ignore[arg-type]
+            if isinstance(node_violations, dict) and node_violations:
+                self.logger.warning(
+                    f'Node "{n}" violated | '
+                    + format_log_kv(assets=",".join(sorted(node_violations)))
+                )
+                log_placement_violations(self.logger, node_violations)
                 not_respected.add(n)
 
         for u, v, req in other.edges(data=True):
             res = self.path_resources(u, v)
             edge_violations = self.edge_assets.satisfies(res, req, violations=True)
-            if edge_violations:
-                self.logger.warning(f'Link "{u} -> {v}" not respected:')
-                log_placement_violations(self.logger, edge_violations)  # type: ignore[arg-type]
+            if isinstance(edge_violations, dict) and edge_violations:
+                self.logger.warning(
+                    f'Link "{u} -> {v}" violated | '
+                    + format_log_kv(assets=",".join(sorted(edge_violations)))
+                )
+                log_placement_violations(self.logger, edge_violations)
                 not_respected.add(u)
                 not_respected.add(v)
 

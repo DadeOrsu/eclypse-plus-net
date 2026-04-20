@@ -4,12 +4,22 @@ We're glad you're considering contributing to ECLYPSE. Before you proceed, pleas
 
 ## Table of Contents
 
+- [Dev Containers](#dev-containers)
 - [Pull Requests](#pull-requests)
 - [Conventional Commits](#conventional-commits)
 - [Code Formatting](#code-formatting)
 - [Linting](#linting)
-- [Docstring Checks](#docstring-checks)
+- [Testing](#testing)
 - [Pre-commit Hooks](#pre-commit-hooks)
+
+## Dev Containers
+
+This repository supports Dev Containers through the checked-in
+[`/.devcontainer`](.devcontainer)
+configuration.
+
+If you use VS Code Dev Containers or GitHub Codespaces, you can rely on that
+setup for a reproducible contributor environment.
 
 ## Pull Requests
 
@@ -86,6 +96,16 @@ ruff check --fix
 
 Ruff will detect and correct most common style, import, and docstring issues automatically.
 Please make sure that all warnings and errors are resolved before committing your changes.
+
+## Testing
+
+We use `pytest` for the test suite.
+
+Useful command:
+
+```bash
+make test
+```
 
 ## Pre-commit Hooks
 

@@ -19,33 +19,26 @@ from typing import (
     get_args,
 )
 
+from eclypse.builders._helpers import prune_assets
 from eclypse.graph import Application
-from eclypse.utils.tools import prune_assets
 from eclypse.utils.types import CommunicationInterface
 
 if TYPE_CHECKING:
-    from collections.abc import (
-        Callable,
-    )
-
-    from networkx.classes.reportviews import (
-        EdgeView,
-        NodeView,
-    )
-
     from eclypse.graph.assets import Asset
-    from eclypse.utils.types import InitPolicy
+    from eclypse.utils.types import (
+        InitPolicy,
+        UpdatePolicies,
+    )
 
 
-SUPPORTED_COMMUNICATION_INTERFACES = get_args(CommunicationInterface.__value__)
+_SUPPORTED_COMMUNICATION_INTERFACES = get_args(CommunicationInterface)
 """Supported remote communication interfaces for the Sock Shop builders."""
 
 
 def get_sock_shop(
     application_id: str = "SockShop",
     communication_interface: CommunicationInterface | None = None,
-    node_update_policy: Callable[[NodeView], None] | None = None,
-    edge_update_policy: Callable[[EdgeView], None] | None = None,
+    update_policies: UpdatePolicies = None,
     node_assets: dict[str, Asset] | None = None,
     edge_assets: dict[str, Asset] | None = None,
     include_default_assets: bool = False,
@@ -59,10 +52,8 @@ def get_sock_shop(
         application_id (str): The ID of the application.
         communication_interface (CommunicationInterface | None):
             The communication interface.
-        node_update_policy (Callable[[NodeView], None] | None):
-            A function to update the nodes.
-        edge_update_policy (Callable[[EdgeView], None] | None):
-            A function to update the edges.
+        update_policies (Callable | list[Callable] | None):
+            Graph update policies executed during ``evolve()``.
         node_assets (dict[str, Asset] | None): The assets of the nodes.
         edge_assets (dict[str, Asset] | None): The assets of the edges.
         include_default_assets (bool):
@@ -103,8 +94,7 @@ def get_sock_shop(
 
     app = Application(
         application_id=application_id,
-        node_update_policy=node_update_policy,
-        edge_update_policy=edge_update_policy,
+        update_policies=update_policies,
         node_assets=node_assets,
         edge_assets=edge_assets,
         include_default_assets=include_default_assets,
@@ -119,7 +109,7 @@ def get_sock_shop(
         def id_fn(service):
             return service
 
-    elif communication_interface in SUPPORTED_COMMUNICATION_INTERFACES:
+    elif communication_interface in _SUPPORTED_COMMUNICATION_INTERFACES:
         add_fn = app.add_service  # type: ignore[assignment]
         if communication_interface == "mpi":
             from . import mpi_services as services

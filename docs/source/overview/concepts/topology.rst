@@ -15,12 +15,20 @@ The two classes share many structural similarities, but differ in purpose and in
 
       .. code-block:: python
 
+         from eclypse import policies
          from eclypse.graph.infrastructure import Infrastructure
 
          infrastructure = Infrastructure(
              infrastructure_id="infra",
-             node_update_policy=[...],
-             edge_update_policy=[...],
+             update_policies=[
+                 policies.failure.availability_flap(0.01, up_probability=0.2),
+                 policies.distribution.uniform(
+                     node_assets=["cpu", "ram"],
+                     edge_assets=["latency", "bandwidth"],
+                     node_distribution=(0.95, 1.05),
+                     edge_distribution=(0.95, 1.05),
+                 ),
+             ],
              node_assets=[...],
              edge_assets=[...],
              resource_init="min",
@@ -33,7 +41,7 @@ The two classes share many structural similarities, but differ in purpose and in
       **Key parameters:**
 
       - ``infrastructure_id``: identifier of the infrastructure
-      - ``node_update_policy`` / ``edge_update_policy``: list of :doc:`update policies <update-policy>` for infrastructure resources
+      - ``update_policies``: list of :doc:`update policies <update-policy>` for infrastructure resources
       - ``node_assets`` / ``edge_assets``: available capabilities (:doc:`asset <assets>` values) of nodes and links
       - ``resource_init``: initialisation of resources (*min* or *max*)
       - ``seed``: random seed for reproducibility
@@ -46,12 +54,30 @@ The two classes share many structural similarities, but differ in purpose and in
 
       .. code-block:: python
 
+         from eclypse import policies
          from eclypse.graph.application import Application
 
          application = Application(
              application_id="app",
-             node_update_policy=[...],
-             edge_update_policy=[...],
+             update_policies=[
+                 policies.after(
+                     50,
+                     policies.degrade.reduce(
+                         factor=0.6,
+                         epochs=200,
+                         node_assets=["cpu", "ram"],
+                         edge_assets=["bandwidth"],
+                     ),
+                 ),
+                 policies.after(
+                     50,
+                     policies.degrade.increase(
+                         factor=1.6667,
+                         epochs=200,
+                         edge_assets=["latency"],
+                     ),
+                 ),
+             ],
              node_assets=[...],
              edge_assets=[...],
              requirement_init="min",
@@ -62,7 +88,7 @@ The two classes share many structural similarities, but differ in purpose and in
       **Key parameters:**
 
       - ``application_id``: identifier of the application
-      - ``node_update_policy`` / ``edge_update_policy``: list of :doc:`update policies <update-policy>` for application requirements
+      - ``update_policies``: list of :doc:`update policies <update-policy>` for application requirements
       - ``node_assets`` / ``edge_assets``: resource requirements (:doc:`asset <assets>` values) of services and links
       - ``requirement_init``: initialisation of resources (*min* or *max*)
       - ``seed``: random seed for reproducibility
