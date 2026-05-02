@@ -6,10 +6,15 @@ from eclypse.graph import Application
 from eclypse.remote.service.service import Service
 
 
+class ConcreteService(Service):
+    async def step(self):
+        return None
+
+
 def test_application_add_service_and_set_flows():
     app = Application("demo")
-    gateway = Service("gateway")
-    worker = Service("worker")
+    gateway = ConcreteService("gateway")
+    worker = ConcreteService("worker")
 
     app.add_service(gateway)
     app.add_service(worker)
@@ -17,14 +22,14 @@ def test_application_add_service_and_set_flows():
     app.set_flows()
 
     assert app.flows == [["gateway", "worker"]]
-    assert app.has_logic
+    assert app.has_service_implementations
 
     with pytest.raises(TypeError):
         app.add_service("not-a-service")  # type: ignore[arg-type]
 
 
 def test_application_rejects_reassigning_service_to_another_app():
-    gateway = Service("gateway")
+    gateway = ConcreteService("gateway")
     first = Application("first")
     second = Application("second")
 
@@ -36,15 +41,15 @@ def test_application_rejects_reassigning_service_to_another_app():
 
 def test_application_set_flows_handles_missing_gateway_and_missing_path():
     app = Application("demo")
-    worker = Service("worker")
-    helper = Service("helper")
+    worker = ConcreteService("worker")
+    helper = ConcreteService("helper")
 
     app.add_service(worker)
     app.add_service(helper)
     app.set_flows()
     assert app.flows == []
 
-    gateway = Service("gateway")
+    gateway = ConcreteService("gateway")
     app.add_service(gateway)
     app.add_edge("gateway", "worker")
     app.set_flows()
@@ -56,4 +61,4 @@ def test_application_detects_missing_service_logic():
     app = Application("broken")
     app.add_node("orphan")
 
-    assert not app.has_logic
+    assert not app.has_service_implementations

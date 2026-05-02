@@ -59,12 +59,7 @@ def cpu(
     Returns:
         Additive: The CPU asset.
     """
-    _init_fn = (
-        Choice([2**i for i in range(1, 9)])
-        if init_fn_or_value is None
-        else init_fn_or_value
-    )
-    return Additive(lower_bound, upper_bound, _init_fn)
+    return Additive(lower_bound, upper_bound, init_fn_or_value)
 
 
 def ram(
@@ -83,12 +78,7 @@ def ram(
     Returns:
         Additive: The RAM asset.
     """
-    _init_fn = (
-        Choice([2**i for i in range(1, 11)])
-        if init_fn_or_value is None
-        else init_fn_or_value
-    )
-    return Additive(lower_bound, upper_bound, _init_fn)
+    return Additive(lower_bound, upper_bound, init_fn_or_value)
 
 
 def storage(
@@ -107,12 +97,7 @@ def storage(
     Returns:
         Additive: The storage asset.
     """
-    _init_fn = (
-        Choice([2**i for i in range(1, 13)])
-        if init_fn_or_value is None
-        else init_fn_or_value
-    )
-    return Additive(lower_bound, upper_bound, _init_fn)
+    return Additive(lower_bound, upper_bound, init_fn_or_value)
 
 
 def gpu(
@@ -131,12 +116,7 @@ def gpu(
     Returns:
         Additive: The GPU asset.
     """
-    _init_fn = (
-        Choice([2**i for i in range(1, 9)])
-        if init_fn_or_value is None
-        else init_fn_or_value
-    )
-    return Additive(lower_bound, upper_bound, _init_fn)
+    return Additive(lower_bound, upper_bound, init_fn_or_value)
 
 
 def availability(
@@ -155,8 +135,7 @@ def availability(
     Returns:
         Multiplicative: The availability asset.
     """
-    _init_fn = Uniform(0.99, 1) if init_fn_or_value is None else init_fn_or_value
-    return Multiplicative(lower_bound, upper_bound, _init_fn)
+    return Multiplicative(lower_bound, upper_bound, init_fn_or_value)
 
 
 def processing_time(
@@ -175,8 +154,7 @@ def processing_time(
     Returns:
         Concave: The processing time asset.
     """
-    _init_fn = IntUniform(1, 25) if init_fn_or_value is None else init_fn_or_value
-    return Concave(lower_bound, upper_bound, _init_fn, functional=False)
+    return Concave(lower_bound, upper_bound, init_fn_or_value, functional=False)
 
 
 def latency(
@@ -195,8 +173,7 @@ def latency(
     Returns:
         Concave: The latency asset.
     """
-    _init_fn = IntUniform(1, 40) if init_fn_or_value is None else init_fn_or_value
-    return Concave(lower_bound, upper_bound, _init_fn)
+    return Concave(lower_bound, upper_bound, init_fn_or_value)
 
 
 def bandwidth(
@@ -215,36 +192,62 @@ def bandwidth(
     Returns:
         Additive: The bandwidth asset.
     """
-    _init_fn = IntUniform(50, 1500) if init_fn_or_value is None else init_fn_or_value
-    return Additive(lower_bound, upper_bound, _init_fn)
+    return Additive(lower_bound, upper_bound, init_fn_or_value)
 
 
-def get_default_node_assets():
+_DEFAULT_NODE_ASSETS_INIT_FN = {
+    "cpu": Choice([2**i for i in range(1, 9)]),
+    "ram": Choice([2**i for i in range(1, 11)]),
+    "storage": Choice([2**i for i in range(1, 13)]),
+    "gpu": Choice([2**i for i in range(1, 9)]),
+    "availability": Uniform(0.99, 1),
+    "processing_time": IntUniform(1, 25),
+}
+
+_DEFAULT_EDGE_ASSETS_INIT_FN = {
+    "latency": IntUniform(1, 40),
+    "bandwidth": IntUniform(50, 1500),
+}
+
+
+def get_default_node_assets(with_init: bool = True):
     """Get the set of default node assets.
+
+    Args:
+        with_init (bool):
+            Whether to attach the bundled default initialisers to the assets.
 
     Returns:
         dict[str, Any]: The default node assets:
             cpu, ram, storage, gpu, availability, processing_time.
     """
+    init_fns = _DEFAULT_NODE_ASSETS_INIT_FN if with_init else {}
     return {
-        "cpu": cpu(),
-        "ram": ram(),
-        "storage": storage(),
-        "gpu": gpu(),
-        "availability": availability(),
-        "processing_time": processing_time(),
+        "cpu": cpu(init_fn_or_value=init_fns.get("cpu")),
+        "ram": ram(init_fn_or_value=init_fns.get("ram")),
+        "storage": storage(init_fn_or_value=init_fns.get("storage")),
+        "gpu": gpu(init_fn_or_value=init_fns.get("gpu")),
+        "availability": availability(init_fn_or_value=init_fns.get("availability")),
+        "processing_time": processing_time(
+            init_fn_or_value=init_fns.get("processing_time")
+        ),
     }
 
 
-def get_default_edge_assets():
+def get_default_edge_assets(with_init: bool = True):
     """Get the set of default edge assets.
+
+    Args:
+        with_init (bool):
+            Whether to attach the bundled default initialisers to the assets.
 
     Returns:
         dict[str, Any]: The default edge assets: latency, bandwidth.
     """
+    init_fns = _DEFAULT_EDGE_ASSETS_INIT_FN if with_init else {}
     return {
-        "latency": latency(),
-        "bandwidth": bandwidth(),
+        "latency": latency(init_fn_or_value=init_fns.get("latency")),
+        "bandwidth": bandwidth(init_fn_or_value=init_fns.get("bandwidth")),
     }
 
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from typing import (
     TYPE_CHECKING,
-    Any,
     cast,
 )
 
@@ -29,11 +28,12 @@ if TYPE_CHECKING:
 
     from eclypse.graph.application import Application
     from eclypse.graph.infrastructure import Infrastructure
-    from eclypse.placement.strategies.strategy import PlacementStrategy
+    from eclypse.placement.strategies import PlacementStrategy
     from eclypse.remote.bootstrap.bootstrap import RemoteBootstrap
     from eclypse.report import FrameBackend
     from eclypse.simulation._simulator.local import SimulationState
     from eclypse.simulation._simulator.remote import RemoteSimulator
+    from eclypse.utils._logging import Logger
 
 
 class Simulation:
@@ -46,9 +46,7 @@ class Simulation:
     ):
         """Create a simulation bound to an infrastructure and configuration."""
         self.infrastructure = infrastructure
-        self._sim_config = (
-            simulation_config if simulation_config is not None else SimulationConfig()
-        )
+        self._sim_config = simulation_config or SimulationConfig()
         self._sim_config.prepare_runtime()
 
         self.remote: RemoteBootstrap | None = cast(
@@ -76,6 +74,19 @@ class Simulation:
         """Prepare the process environment required by the simulation runtime."""
         self._sim_config.prepare_runtime()
 
+    def __enter__(self) -> Simulation:
+        """Return the simulation so it can be managed with a ``with`` block."""
+        return self
+
+    def __exit__(self, *_exc_info):
+        """Stop the simulation when leaving a context-managed block."""
+        try:
+            self.stop()
+        except Exception as error:
+            self.logger.exception(f"Failed to stop simulation during cleanup: {error}")
+            raise
+        return False
+
     def start(self):
         """Start the simulation."""
         self.prepare_runtime()
@@ -90,14 +101,36 @@ class Simulation:
 
         _local_remote_event_call(self.simulator, self.remote, START_EVENT)
         self._finished_logged = False
+        self._log_configuration()
+        self.logger.log("ECLYPSE", "Simulation started.")
+
+    def _log_configuration(self):
+        """Log the run configuration that gives context to subsequent events."""
+        report_backend = self._sim_config.report_backend
+        if report_backend is not None and not isinstance(report_backend, str):
+            report_backend = report_backend.name
+
         self.logger.log(
             "ECLYPSE",
-            "Simulation started | "
+            "Simulation configuration | "
             + format_log_kv(
                 infrastructure=self.infrastructure.id,
-                # apps=[app.id for app in self.applications.values()],
-                # path=self._sim_config.path,
-                # remote=self.remote is not None,
+                path=self._sim_config.path,
+                remote=self.remote is not None,
+                step_every_ms=self._sim_config.step_every_ms,
+                timeout=self._sim_config.timeout,
+                max_steps=self._sim_config.max_steps,
+                seed=self._sim_config.seed,
+                report_format=self._sim_config.report_format,
+                report_backend=report_backend,
+                log_level=self._sim_config.log_level,
+                log_to_file=self._sim_config.log_to_file,
+                include_default_metrics=self._sim_config.include_default_metrics,
+                default_strategy=(
+                    self._sim_config.default_strategy.__class__.__name__
+                    if self._sim_config.default_strategy is not None
+                    else None
+                ),
             ),
         )
 
@@ -138,12 +171,41 @@ class Simulation:
                     raise
 
                 interrupted = True
-                self.logger.log(
-                    "ECLYPSE",
-                    "Simulation stop requested. Press Ctrl+C again to stop the simulation.",
+                self.logger.warning(
+                    (
+                        "Simulation stop requested. Press Ctrl+C again to "
+                        "stop the simulation."
+                    ),
                 )
                 self.stop(blocking=False)
                 timeout = None
+
+    def run(self, steps: int | None = None, seconds: float | None = None):
+        """Start the simulation and wait for it to complete.
+
+        Args:
+            steps (int | None): If provided, manually trigger this many simulation
+                steps before stopping.
+            seconds (float | None): If provided, wait for at most this many seconds
+                before requesting a stop.
+        """
+        if steps is not None and seconds is not None:
+            raise ValueError("Only one of 'steps' and 'seconds' can be provided.")
+        if steps is not None and steps < 0:
+            raise ValueError("'steps' must be greater than or equal to 0.")
+        if seconds is not None and seconds < 0:
+            raise ValueError("'seconds' must be greater than or equal to 0.")
+
+        self.start()
+        if steps is not None:
+            for _ in range(steps):
+                self.step()
+            self.stop()
+            return
+
+        self.wait(timeout=seconds)
+        if seconds is not None and self.status.name != "IDLE":
+            self.stop()
 
     def register(
         self,
@@ -151,20 +213,14 @@ class Simulation:
         placement_strategy: PlacementStrategy | None = None,
     ):
         """Include an application in the simulation."""
-        if placement_strategy is None:
-            if not self.infrastructure.has_strategy:
-                raise ValueError(
-                    "Must provide a global placement strategy for the infrastructure "
-                    + f"or a placement strategy for the application {application.id}"
-                )
-        elif self.infrastructure.has_strategy:
-            self.logger.warning(
-                "Ignoring the provided placement strategy, using the global one."
-                + " Unset the global strategy to use the provided one."
+        if placement_strategy is None and self._sim_config.default_strategy is None:
+            raise ValueError(
+                "Must provide a default placement strategy in SimulationConfig "
+                + f"or a placement strategy for application {application.id}"
             )
 
         if self.remote:
-            if application.has_logic:
+            if application.has_service_implementations:
                 ray_backend.get(
                     self.simulator.register.remote(  # type: ignore[attr-defined]
                         application,
@@ -189,7 +245,7 @@ class Simulation:
         return self.simulator.applications
 
     @property
-    def logger(self) -> Any:
+    def logger(self) -> Logger:
         """Logger bound to the simulation component."""
         return self._logger.bind(id="Simulation")
 

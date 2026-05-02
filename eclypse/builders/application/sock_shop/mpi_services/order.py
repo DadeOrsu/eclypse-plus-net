@@ -11,26 +11,27 @@ different services like payment, inventory, and shipping.
     - Tracks the status of placed orders (e.g., pending, confirmed, shipped).
 """
 
-import random as rnd
-
 from eclypse.remote.communication import mpi
 from eclypse.remote.service import Service
+from eclypse.utils import format_log_kv
 
 
 class OrderService(Service):
     """MPI workflow of the Order service."""
 
-    def __init__(self, name):
+    def __init__(self, name, store_step: bool = False):
         """Initialize the OrderService with an order ID.
 
         Args:
             name (str): The name of the service.
+            store_step (bool, optional): Whether to store the results of
+                each step. Defaults to False.
         """
-        super().__init__(name)
+        super().__init__(name, store_step=store_step)
         self.order_id = 54321
-        self.transaction_id = None
-        self.shipping_details = {}
-        self.items = []
+        self.transaction_id: int | None = None
+        self.shipping_details: dict[str, str] = {}
+        self.items: list[dict[str, int]] = []
 
     async def step(self):
         """Example workflow of the `OrderService` class.
@@ -53,10 +54,10 @@ class OrderService(Service):
             str: The ID of the recipient.
             dict: The response body.
         """
-        self.logger.info(f"{self.id} - {body}")
+        self.logger.info("Received request | " + format_log_kv(request=body))
 
         self.items = body.get("items", [])
-        total_amount = sum(rnd.randint(20, 100) for _ in self.items)
+        total_amount = sum(item.get("amount", 0.0) for item in self.items)
 
         # Send request to PaymentService
         payment_request = {
@@ -78,9 +79,12 @@ class OrderService(Service):
             str: The ID of the recipient.
             dict: The response body.
         """
-        self.logger.info(f"{self.id} - {body}")
+        self.logger.info("Received request | " + format_log_kv(request=body))
 
         self.transaction_id = body.get("transaction_id")
+        self.logger.info(
+            "Received response | " + format_log_kv(source="PaymentService", body=body)
+        )
         # Send request to ShippingService
         shipping_request = {
             "request_type": "shipping_request",
@@ -100,9 +104,12 @@ class OrderService(Service):
             str: The ID of the recipient.
             dict: The response body.
         """
-        self.logger.info(f"{self.id} - {body}")
+        self.logger.info("Received request | " + format_log_kv(request=body))
 
         self.shipping_details = body.get("details")
+        self.logger.info(
+            "Received response | " + format_log_kv(source="ShippingService", body=body)
+        )
 
         # Send response to FrontendService
         if self.transaction_id is not None:

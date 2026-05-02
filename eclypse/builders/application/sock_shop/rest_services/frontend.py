@@ -12,14 +12,19 @@ providing the user-facing components of the store.
 """
 
 from eclypse.remote.service import Service
+from eclypse.utils import format_log_kv
 
 
 class FrontendService(Service):
     """Example workflow of the Frontend service."""
 
-    def __init__(self, name):
+    def __init__(self, name, store_step: bool = False):
         """Initialise the Frontend service with the REST interface."""
-        super().__init__(name, communication_interface="rest")
+        super().__init__(
+            name,
+            communication_interface="rest",
+            store_step=store_step,
+        )
         self.user_id = 12345
 
     async def step(self):
@@ -32,10 +37,21 @@ class FrontendService(Service):
         user_r = await self.rest.get("UserService/user", user_id=self.user_id)
         cart_r = await self.rest.get("CartService/cart")
 
+        self.logger.info(
+            "Received response | "
+            + format_log_kv(source="CatalogService", body=catalog_r.body)
+        )
+        self.logger.info(
+            "Received response | "
+            + format_log_kv(source="UserService", body=user_r.body)
+        )
+        self.logger.info(
+            "Received response | "
+            + format_log_kv(source="CartService", body=cart_r.body)
+        )
+
         products = catalog_r.body.get("products", [])
         items = cart_r.body.get("items", [])
-        user_data = user_r.body
-        self.logger.info(f"{self.id} - {user_data}")
 
         order_items = [
             {
@@ -53,4 +69,7 @@ class FrontendService(Service):
         ]
 
         order_r = await self.rest.post("OrderService/order", items=order_items)
-        self.logger.info(f"{order_r.body}")
+        self.logger.info(
+            "Received response | "
+            + format_log_kv(source="OrderService", body=order_r.body)
+        )

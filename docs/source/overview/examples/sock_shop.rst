@@ -19,10 +19,17 @@ because it highlights the practical differences between MPI and REST
 communication in ECLYPSE.
 
 The full code lives in the
-`examples/sock_shop/mpi <https://github.com/eclypse-org/eclypse/tree/main/examples/sock_shop/mpi>`_
+`examples/sock_shop/mpi.py <https://github.com/eclypse-org/eclypse/blob/main/examples/sock_shop/mpi.py>`_
 and
-`examples/sock_shop/rest <https://github.com/eclypse-org/eclypse/tree/main/examples/sock_shop/rest>`_
+`examples/sock_shop/rest.py <https://github.com/eclypse-org/eclypse/blob/main/examples/sock_shop/rest.py>`_
 directories.
+
+Run either variant from the repository root with:
+
+.. code-block:: bash
+
+   uv run sock-shop-mpi
+   uv run sock-shop-rest
 
 .. warning::
 

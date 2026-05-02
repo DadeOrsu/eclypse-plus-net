@@ -38,7 +38,7 @@ class Application(AssetGraph):  # pylint: disable=too-few-public-methods
         update_policies: UpdatePolicies = None,
         node_assets: dict[str, Asset] | None = None,
         edge_assets: dict[str, Asset] | None = None,
-        include_default_assets: bool = False,
+        include_default_assets: bool = True,
         requirement_init: InitPolicy = "min",
         flows: list[list[str]] | None = None,
         seed: int | None = None,
@@ -52,7 +52,7 @@ class Application(AssetGraph):  # pylint: disable=too-few-public-methods
             node_assets (dict[str, Asset] | None): The assets of the nodes.
             edge_assets (dict[str, Asset] | None): The assets of the edges.
             include_default_assets (bool): Whether to include the default assets. \
-                Defaults to False.
+                Defaults to True.
             requirement_init (InitPolicy):
                 The initialization of the requirements.
             flows (list[list[str]] | None): The flows of the application.
@@ -60,8 +60,8 @@ class Application(AssetGraph):  # pylint: disable=too-few-public-methods
         """
         _node_assets = get_default_node_assets() if include_default_assets else {}
         _edge_assets = get_default_edge_assets() if include_default_assets else {}
-        _node_assets.update(node_assets if node_assets is not None else {})
-        _edge_assets.update(edge_assets if edge_assets is not None else {})
+        _node_assets.update(node_assets or {})
+        _edge_assets.update(edge_assets or {})
 
         super().__init__(
             graph_id=application_id,
@@ -100,16 +100,19 @@ class Application(AssetGraph):  # pylint: disable=too-few-public-methods
 
         self.add_node(service.id, **assets)
 
-    def set_flows(self):
+    def set_flows(self, ingress: str = "gateway"):
         """Set the flows of the application, using the following rules.
 
         - If the flows are already set, do nothing.
-        - If the flows are not set, use the gateway as the source and all\
+        - If the flows are not set, use the `ingress` as the source and all
             the other nodes as the target.
-        - If there is no gateway, set the flows to an empty list.
+        - If there is no ingress, set the flows to an empty list.
+
+        Args:
+            ingress (str): The name of the ingress node. Defaults to "gateway".
         """
         if self.flows == []:
-            gateway_name = next((s for s in self.nodes if "gateway" in s.lower()), None)
+            gateway_name = next((s for s in self.nodes if s == ingress), None)
             if gateway_name is not None:
                 self.flows = []
                 for target in self.nodes:
@@ -123,7 +126,7 @@ class Application(AssetGraph):  # pylint: disable=too-few-public-methods
                         continue
 
     @cached_property
-    def has_logic(self) -> bool:
+    def has_service_implementations(self) -> bool:
         """Check if the application has a logic for each service.
 
         This property requires to be True for the remote execution.

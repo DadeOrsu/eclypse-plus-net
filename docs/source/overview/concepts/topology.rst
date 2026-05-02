@@ -33,7 +33,6 @@ The two classes share many structural similarities, but differ in purpose and in
              edge_assets=[...],
              resource_init="min",
              seed=42,
-             placement_strategy=...,
              path_assets_aggregators=...,
              path_algorithm=...,
          )
@@ -45,7 +44,6 @@ The two classes share many structural similarities, but differ in purpose and in
       - ``node_assets`` / ``edge_assets``: available capabilities (:doc:`asset <assets>` values) of nodes and links
       - ``resource_init``: initialisation of resources (*min* or *max*)
       - ``seed``: random seed for reproducibility
-      - ``placement_strategy``: global :doc:`placement strategy <placement-strategy>` for all applications
       - ``path_assets_aggregators``: aggregators for *each link asset* evaluation across paths
       - ``path_algorithm``: path logic to retrieve and check the paths among nodes
 
@@ -199,38 +197,68 @@ assets and flows.
       .. code-block:: python
 
          from eclypse.builders.infrastructure import (
-             b_cube,
-             fat_tree,
-             hierarchical,
-             random,
-             star,
+             get_b_cube,
+             get_continuum_tiered,
+             get_fat_tree,
+             get_backbone,
+             get_caida,
+             get_gabriel,
              get_orion_cev,
+             get_sndlib,
+             get_topohub,
+             get_topology_zoo,
+             get_hierarchical,
+             get_mec_5g,
+             get_multi_region_wan,
+             get_random,
+             get_scale_free,
+             get_small_world,
+             get_star,
          )
 
-      **Available infrastructure builders:**
+      ECLYPSE includes several off-the-shelf infrastructure builders across
+      generic generators, architecture patterns, and named references. For the
+      full list, see :mod:`eclypse.builders.infrastructure`.
 
-      - :py:func:`~eclypse.builders.infrastructure.generators.b_cube`
-      - :py:func:`~eclypse.builders.infrastructure.generators.fat_tree`
-      - :py:func:`~eclypse.builders.infrastructure.generators.hierarchical`
-      - :py:func:`~eclypse.builders.infrastructure.generators.random`
-      - :py:func:`~eclypse.builders.infrastructure.generators.star`
-      - :py:func:`~eclypse.builders.infrastructure.orion_cev.get_orion_cev`: returns the ORION-CEV reference infrastructure
+      .. list-table::
+         :header-rows: 1
+
+         * - Category
+           - Builders
+         * - Generic generators
+           - ``get_star``, ``get_random``, ``get_hierarchical``,
+             ``get_fat_tree``, ``get_b_cube``, ``get_small_world``,
+             ``get_scale_free``
+         * - Architecture patterns
+           - ``get_continuum_tiered``, ``get_mec_5g``,
+             ``get_multi_region_wan``, ``get_industrial_tsn``,
+             ``get_factory_cells``, ``get_vehicular_edge``
+         * - References
+           - ``get_orion_cev``, ``get_topohub``, ``get_topology_zoo``,
+             ``get_sndlib``, ``get_backbone``, ``get_caida``,
+             ``get_gabriel``
 
       **Example:**
 
       .. code-block:: python
 
-         from eclypse.builders.infrastructure import fat_tree
+         from eclypse.builders.infrastructure import get_fat_tree
 
-         infra = fat_tree(k=4)
+         infra = get_fat_tree(k=4)
 
    .. tab-item:: Application
       :sync: app
 
-      ECLYPSE currently includes a builder for the **SockShop** application
-      from the `Microservices Demo <https://github.com/ocp-power-demos/sock-shop-demo>`_
-      project, using
+      ECLYPSE includes several built-in application builders, all collected in
+      the :mod:`eclypse.builders.application` package. Sock Shop remains the
+      reference example used throughout this section, using
       :func:`~eclypse.builders.application.sock_shop.application.get_sock_shop`.
+
+      For simulation-only task DAGs, ECLYPSE also provides workflow builders in
+      :mod:`eclypse.builders.workflow`. These builders use WfCommons to
+      generate workflows and normalise file-size-derived ``storage`` and
+      dependency ``bandwidth`` values from bytes to MiB before assigning them
+      to the default ECLYPSE assets.
 
       .. code-block:: python
 
@@ -239,7 +267,8 @@ assets and flows.
          app = get_sock_shop()
 
       This application contains multiple interconnected services and
-      representative communication flows.
+      representative communication flows. For the full list of built-in
+      applications, see :mod:`eclypse.builders.application`.
 
 .. tip::
 

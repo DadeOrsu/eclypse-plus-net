@@ -1,5 +1,7 @@
 .DEFAULT_GOAL := check
 
+PYTHON ?= python3
+
 check:
 	pre-commit run -a
 
@@ -9,30 +11,25 @@ changelog:
 patch:
 	cz bump --changelog --increment patch
 
-setup:
-	python -m pip install --upgrade pip
-	pip install poetry
-	poetry config virtualenvs.create false
+setup-build:
+	uv sync --group dev --group deploy --no-install-project
 
-setup-build: setup
-	poetry install --with=dev,deploy --no-root
-
-setup-test: setup
-	poetry install --with=test --extras remote --extras tboard --no-root
+setup-test:
+	uv sync --group test --no-install-project
 
 format:
 	isort eclypse
 	ruff check
 	ruff format
 
-build: format
-	poetry build -v --no-cache --format wheel
-
 verify:
 	twine check --strict dist/*
 
+build: format
+	uv build --wheel --clear --no-create-gitignore
+
 publish-test: build verify
-	poetry publish -r test-pypi --skip-existing -v
+	UV_PUBLISH_TOKEN="$$UV_TEST_PYPI_ECLYPSE" uv publish --index testpypi -v
 
 publish: build verify
-	poetry publish --skip-existing -v
+	uv publish -v

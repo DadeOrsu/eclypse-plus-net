@@ -69,8 +69,8 @@ class AssetGraph(nx.DiGraph):
         self.id = graph_id
         self.update_policies = _normalize_update_policies(update_policies)
 
-        _node_assets = node_assets if node_assets is not None else {}
-        _edge_assets = edge_assets if edge_assets is not None else {}
+        _node_assets = node_assets or {}
+        _edge_assets = edge_assets or {}
 
         self.node_assets = AssetBucket(**_node_assets)
         self.edge_assets = AssetBucket(**_edge_assets)
@@ -118,7 +118,7 @@ class AssetGraph(nx.DiGraph):
 
         violations = self.node_assets.is_consistent(_assets, violations=True)
         if isinstance(violations, dict) and violations:
-            msg = f"Node {node_for_adding} has inconsistent assets | " + format_log_kv(
+            msg = f"{node_for_adding} has inconsistent assets | " + format_log_kv(
                 assets=",".join(sorted(violations))
             )
             if strict:
@@ -168,7 +168,7 @@ class AssetGraph(nx.DiGraph):
         violations = self.edge_assets.is_consistent(_assets, violations=True)
         if isinstance(violations, dict) and violations:
             msg = (
-                f"Edge {u_of_edge} -> {v_of_edge} has inconsistent assets | "
+                f"({u_of_edge} -> {v_of_edge}) has inconsistent assets | "
                 + format_log_kv(assets=",".join(sorted(violations)))
             )
             if strict:

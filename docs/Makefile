@@ -3,7 +3,7 @@
 
 # You can set these variables from the command line, and also
 # from the environment for the first two.
-SPHINXOPTS    ?=
+SPHINXOPTS    ?= -W
 SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _build
@@ -19,9 +19,7 @@ help:
 livehtml:
 	sphinx-autobuild "$(SOURCEDIR)" "$(BUILDDIR)"/html $(SPHINXOPTS) $(O)
 
-# check docstrings using pylint in ../eclypse module
 check:
-# 	pylint --rcfile=../.pylintrc --enable=C0114,C0115,C0116 --disable=R0801,E0611 ../eclypse
 	ruff check --select D,E501 ../eclypse
 
 .PHONY: help Makefile

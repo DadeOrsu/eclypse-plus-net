@@ -13,19 +13,22 @@ import random as rnd
 
 from eclypse.remote.communication import rest
 from eclypse.remote.service import RESTService
+from eclypse.utils import format_log_kv
 from eclypse.utils.constants import RND_SEED
 
 
 class PaymentService(RESTService):
     """REST service for payment processing."""
 
-    def __init__(self, service_id: str):
+    def __init__(self, service_id: str, store_step: bool = False):
         """Initialize the PaymentService with a random number generator.
 
         Args:
             service_id (str): The ID of the service.
+            store_step (bool, optional): Whether to store the results of
+                each step. Defaults to False.
         """
-        super().__init__(service_id)
+        super().__init__(service_id, store_step=store_step)
         self.rnd = rnd.Random(os.getenv(RND_SEED))
 
     @rest.endpoint("/pay", "POST")
@@ -52,6 +55,9 @@ class PaymentService(RESTService):
                     },
                 )
         """
+        self.logger.info(
+            "Received request | " + format_log_kv(order_id=order_id, amount=amount)
+        )
         return 200, {
             "order_id": order_id,
             "amount": amount + self.rnd.randint(1, 10),

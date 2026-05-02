@@ -16,6 +16,7 @@ from eclypse.placement.strategies import StaticStrategy
 from eclypse.placement.view import PlacementView
 from eclypse.remote.service.service import Service
 from eclypse.simulation.config import SimulationConfig
+from eclypse.utils._logging import config_logger
 
 
 class BasicService(Service):
@@ -35,6 +36,7 @@ class DummyLogger:
 
     def __init__(self):
         self.records: list[tuple[str, tuple[Any, ...]]] = []
+        self.levels = {"ECLYPSE", "ECLYPSE_EXCEPTION"}
 
     def bind(self, **_: Any) -> DummyLogger:
         return self
@@ -46,6 +48,9 @@ class DummyLogger:
         self.records.append(("debug", args))
 
     def log(self, *args: Any):
+        if args and isinstance(args[0], str) and args[0] in self.levels:
+            self.records.append((args[0], args[1:]))
+            return
         self.records.append(("log", args))
 
     def warning(self, *args: Any):
@@ -54,10 +59,18 @@ class DummyLogger:
     def error(self, *args: Any):
         self.records.append(("error", args))
 
+    def info(self, *args: Any):
+        self.records.append(("info", args))
+
 
 @pytest.fixture
 def dummy_logger() -> DummyLogger:
     return DummyLogger()
+
+
+@pytest.fixture(autouse=True)
+def configured_eclypse_logger() -> None:
+    config_logger()
 
 
 @pytest.fixture

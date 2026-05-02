@@ -12,6 +12,7 @@ import random as rnd
 
 from eclypse.remote.communication import mpi
 from eclypse.remote.service import Service
+from eclypse.utils import format_log_kv
 
 
 class PaymentService(Service):
@@ -36,13 +37,14 @@ class PaymentService(Service):
             str: The ID of the recipient.
             dict: The response body.
         """
-        self.logger.info(f"{self.id} - {body}")
+        self.logger.info("Received request | " + format_log_kv(request=body))
 
         # Send response to OrderService
         if body.get("request_type") == "payment_request":
             payment_response = {
                 "response_type": "payment_response",
                 "order_id": body.get("order_id"),
+                "transaction_id": rnd.randint(1000, 9999),
                 "status": "success" if rnd.choice([True, False]) else "failure",
             }
         else:

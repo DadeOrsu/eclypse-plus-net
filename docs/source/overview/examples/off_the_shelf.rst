@@ -4,8 +4,8 @@ Off-the-shelf
 This example shows a complete local simulation built only from reusable ECLYPSE
 components:
 
-- the :func:`~eclypse.builders.application.get_sock_shop` application builder
-- the :func:`~eclypse.builders.infrastructure.hierarchical` infrastructure builder
+- the :func:`~eclypse.builders.application.get_hotel_reservation` application builder
+- an infrastructure builder from :mod:`eclypse.builders.infrastructure`
 - built-in update policies from :mod:`eclypse.policies`
 - a built-in placement strategy
 
@@ -16,12 +16,21 @@ The full code lives in the
 `examples/off_the_shelf <https://github.com/eclypse-org/eclypse/tree/main/examples/off_the_shelf>`_
 directory.
 
+Run it from the repository root with:
+
+.. code-block:: bash
+
+   uv run off-the-shelf
+
 Application
 -----------
 
-The application is the standard Sock Shop graph created through the built-in
-builder, with built-in uniform-distribution and degradation policies that
-progressively make placement harder.
+The application is the built-in hotel reservation graph, paired with built-in
+uniform-distribution and degradation policies that progressively make
+placement harder.
+
+ECLYPSE also provides several other ready-made application builders collected
+in :mod:`eclypse.builders.application`.
 
 .. dropdown:: Application code
 
@@ -34,9 +43,10 @@ Infrastructure
 
 The infrastructure is a generated hierarchical topology using the default
 assets and a built-in policy mix for flapping availability, uniform
-perturbations, periodic latency spikes, and scheduled degradation. Together with
-``BestFitStrategy``, this makes the example exercise repeated placement under a
-changing environment.
+perturbations, periodic latency spikes, and scheduled degradation. ECLYPSE also
+provides several other off-the-shelf infrastructure builders collected in
+:mod:`eclypse.builders.infrastructure`. Together with ``BestFitStrategy``, this
+example exercises repeated placement under a changing environment.
 
 .. dropdown:: Infrastructure code
 

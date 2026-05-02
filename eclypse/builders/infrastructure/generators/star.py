@@ -25,14 +25,13 @@ if TYPE_CHECKING:
     import networkx as nx
 
     from eclypse.graph.assets import Asset
-    from eclypse.placement.strategies import PlacementStrategy
     from eclypse.utils.types import (
         InitPolicy,
         UpdatePolicies,
     )
 
 
-def star(
+def get_star(
     n_clients: int,
     infrastructure_id: str = "star",
     symmetric: bool = False,
@@ -45,7 +44,6 @@ def star(
     strict: bool = False,
     resource_init: InitPolicy = "min",
     path_algorithm: Callable[[nx.Graph, str, str], list[str]] | None = None,
-    placement_strategy: PlacementStrategy | None = None,
     seed: int | None = None,
 ):
     """Create a star infrastructure with `n_clients` clients around a central node.
@@ -75,9 +73,6 @@ def star(
         path_algorithm (Callable[[nx.Graph, str, str], list[str]] | None):
             The algorithm to compute the paths between nodes. Defaults to
             None.
-        placement_strategy (PlacementStrategy | None):
-            The placement strategy for the infrastructure. Defaults to
-            None.
         seed (int | None): The seed for the random number generator. Defaults to None.
 
     Returns:
@@ -91,11 +86,10 @@ def star(
         include_default_assets=include_default_assets,
         resource_init=resource_init,
         path_algorithm=path_algorithm,
-        placement_strategy=placement_strategy,
         seed=seed,
     )
-    _outer_assets_values = {} if outer_assets_values is None else outer_assets_values
-    _center_assets_values = {} if center_assets_values is None else center_assets_values
+    _outer_assets_values = outer_assets_values or {}
+    _center_assets_values = center_assets_values or {}
     for i in range(n_clients):
         infrastructure.add_node(f"outer_{i}", strict=strict, **_outer_assets_values)
     infrastructure.add_node("center", strict=strict, **_center_assets_values)

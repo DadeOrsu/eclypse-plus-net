@@ -9,7 +9,6 @@ from eclypse.graph.infrastructure import (
     _cost_changed,
     _default_weight_function,
 )
-from eclypse.placement.strategies import StaticStrategy
 
 
 def test_infrastructure_path_resources_and_cache_behaviour(sample_infrastructure):
@@ -62,7 +61,7 @@ def test_infrastructure_contains_and_helper_functions(sample_infrastructure):
     requirements.add_node("edge-b", cpu=1)
     requirements.add_edge("edge-a", "edge-b", latency=0, bandwidth=1000, strict=False)
 
-    not_respected = sample_infrastructure.contains(requirements)
+    not_respected = sample_infrastructure.validate(requirements)
 
     assert "edge-a" in not_respected
     assert "edge-b" in not_respected
@@ -70,13 +69,8 @@ def test_infrastructure_contains_and_helper_functions(sample_infrastructure):
     assert _cost_changed(10, 0)
 
 
-def test_infrastructure_same_node_resources_and_strategy_flag(sample_infrastructure):
+def test_infrastructure_same_node_resources(sample_infrastructure):
     assert sample_infrastructure.path_resources("edge-a", "edge-a") == (
         sample_infrastructure.edge_assets.upper_bound
     )
     assert sample_infrastructure.processing_time("edge-a", "edge-a") == 0.0
-    assert sample_infrastructure.has_strategy is False
-
-    sample_infrastructure.strategy = StaticStrategy({"gateway": "edge-a"})
-
-    assert sample_infrastructure.has_strategy is True

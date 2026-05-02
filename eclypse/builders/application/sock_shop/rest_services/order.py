@@ -14,18 +14,21 @@ different services like payment, inventory, and shipping.
 from eclypse.remote.communication import rest
 from eclypse.remote.communication.rest import HTTPStatusCode
 from eclypse.remote.service import RESTService
+from eclypse.utils import format_log_kv
 
 
 class OrderService(RESTService):
     """REST endpoints for the Order service."""
 
-    def __init__(self, name):
+    def __init__(self, name, store_step: bool = False):
         """Initialize the OrderService with an order ID.
 
         Args:
             name (str): The name of the service.
+            store_step (bool, optional): Whether to store the results of
+                each step. Defaults to False.
         """
-        super().__init__(name)
+        super().__init__(name, store_step=store_step)
         self.order_id = 54321
 
     @rest.endpoint("/order", "POST")
@@ -56,6 +59,8 @@ class OrderService(RESTService):
                     },
                 )
         """
+        self.logger.info("Received request | " + format_log_kv(items=items))
+
         amount = sum(item["amount"] for item in items)
         payment_r = self.rest.post(
             "PaymentService/pay",
@@ -70,7 +75,14 @@ class OrderService(RESTService):
         shipping_details = shipping_r.body.get("shipping_details")
         transaction_id = payment_r.body.get("transaction_id")
 
-        self.logger.info(f"{transaction_id}")
+        self.logger.info(
+            "Received response | "
+            + format_log_kv(source="PaymentService", transaction_id=transaction_id)
+        )
+        self.logger.info(
+            "Received response | "
+            + format_log_kv(source="ShippingService", body=shipping_r.body)
+        )
 
         return HTTPStatusCode.CREATED, {
             "order_id": self.order_id,
