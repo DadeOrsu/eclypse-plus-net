@@ -24,6 +24,7 @@ class NetworkAwareApplication(Application):
         super().__init__(*args, **kwargs)
         # Internal counter to give unique IDs to generated packets
         self._packet_counter = 0
+        self.current_tick = 0
         self.generated_packets = []
 
     def add_edge(self, u_of_edge: str, v_of_edge: str, packet_size_bytes: int = 1500,
