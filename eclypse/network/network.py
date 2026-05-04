@@ -13,7 +13,7 @@ from constants import (
 )
 
 
-@dataclass
+@dataclass(slots=True)
 class DelayMetrics:
     processing_delay: float
     queue_delay: float
@@ -24,7 +24,7 @@ class DelayMetrics:
     queue_length_packets: int
 
 
-@dataclass
+@dataclass(slots=True)
 class HopInfo:
     hop: str
     processing_ms: float
@@ -35,7 +35,7 @@ class HopInfo:
     arrival_at_next: float
 
 
-@dataclass
+@dataclass(slots=True)
 class RoutingResult:
     status: str
     reason: str = ""
@@ -150,7 +150,7 @@ class Network(Infrastructure):
         # Initialize the NxN matrix filled with -1 (no route)
         self.routing_matrix = np.full((n_nodes, n_nodes), -1, dtype=np.int32)
         # Calculate all shortest paths in a single pass! (Super fast)
-        all_paths = dict(nx.all_pairs_dijkstra_path(self, weight='latency'))
+        all_paths = dict(nx.all_pairs_dijkstra_path(self, weight='latency')) # fare grafo con rustworkx dopo test con tanti nodi
         # Populate the matrix
         for source, paths in all_paths.items():
             src_idx = self.node_to_idx[source]

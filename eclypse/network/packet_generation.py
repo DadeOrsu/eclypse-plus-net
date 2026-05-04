@@ -1,11 +1,15 @@
-from eclypse.workflow.event import event
+from eclypse.workflow.event import EclypseEvent
+from eclypse.workflow.trigger import CascadeTrigger
 
 
-@event(event_type="application", activates_on="step")
-class PacketGenerationEvent:
-
+class PacketGenerationEvent(EclypseEvent):
     def __init__(self):
-        pass
+        # Il nuovo modo per sostituire @event(event_type="application", activates_on="step")
+        super().__init__(
+            name="packet_generation",
+            event_type="application",
+            triggers=[CascadeTrigger("step")]
+        )
 
     # The framework injects automatically (app, placement, infra)
     def __call__(self, app, placement, infra, **kwargs):

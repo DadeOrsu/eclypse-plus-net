@@ -1,15 +1,19 @@
 import pandas as pd
-from eclypse.workflow.event import event
+from eclypse.workflow.event import EclypseEvent
+from eclypse.workflow.trigger import CascadeTrigger
 
 
-@event(event_type="application", activates_on="step")
-class TrafficRoutingEvent:
-
-    def __init__(self, tick_duration_s: float = 0.001):
+class TrafficRoutingEvent(EclypseEvent):
+    def __init__(self, tick_duration_s=0.001):
+        super().__init__(
+            name="traffic_routing",
+            event_type="application",
+            triggers=[CascadeTrigger("step")]
+        )
         self.tick_duration_s = tick_duration_s
         self.network_results = []
 
-    def __call__(self, app, placement, infra, **kwargs):
+    def __call__(self, app, placement, infra, **kwargs): #tipare app e infra
 
         if hasattr(app, "generated_packets") and app.generated_packets:
             print(f"[DEBUG ROUTER] Routing {len(app.generated_packets)} packets in progress...")
@@ -28,7 +32,7 @@ class TrafficRoutingEvent:
 
                 packet.src = src_node
                 packet.dst = dst_node
-
+                # no simulate nel nome
                 result = infra.simulate_packet_routing(packet, current_time_s)
 
                 if result.status == 'DELIVERED':
@@ -41,7 +45,7 @@ class TrafficRoutingEvent:
                         "Start_Time": current_time_s,
                         "End_Time": result.end_time,
                         "Total_Delay_ms": result.total_e2e_delay * 1000,
-                        "Hops": result.hops
+                        "Hops": result.hops # ridonante
                     })
                 else:
                     # We use getattr to safely access the 'reason' attribute, providing a default message if it's not present
@@ -52,3 +56,6 @@ class TrafficRoutingEvent:
 
     def get_dataframe(self):
         return pd.DataFrame(self.network_results)
+    
+
+    # trasformare in una metrica

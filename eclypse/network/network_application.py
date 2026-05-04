@@ -2,7 +2,7 @@ from eclypse.graph import Application
 from dataclasses import dataclass
 
 
-@dataclass
+@dataclass(slots=True)
 class Packet:
     """
     Data class to represent a network packet with its attributes.
