@@ -26,6 +26,7 @@ class NetworkAwareApplication(Application):
         self._packet_counter = 0
         self.current_tick = 0
         self.generated_packets = []
+        self.completed_packets = []
 
     def add_edge(self, u_of_edge: str, v_of_edge: str, packet_size_bytes: int = 1500,
                  packets_per_tick: int = 1, **attr):
