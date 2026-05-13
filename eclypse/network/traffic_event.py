@@ -36,7 +36,7 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
             packet.dst = dst_node
 
             # HEAVY PHYSICAL EXECUTION (happens strictly ONCE!)
-            result = infra.simulate_packet_routing(packet, current_time_s)
+            result = infra.packet_route(packet, current_time_s)
 
             # Put the result in the output basket
             app.completed_packets.append((packet, result))

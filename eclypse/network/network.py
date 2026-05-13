@@ -177,7 +177,7 @@ class Network(Infrastructure):
         # Convert the integer index back to the textual node name
         return self.idx_to_node[next_hop_idx]
 
-    def simulate_packet_routing(self, packet: Packet, start_time: float):
+    def packet_route(self, packet: Packet, start_time: float):
         """
         Simulates the routing of a single packet from its source to its destination,
         calculating all delay components and handling potential failures (like link or node failures).
