@@ -12,8 +12,8 @@ class PacketGenerationEvent(EclypseEvent):
         )
 
     def __call__(self, app: NetworkAwareApplication, placement, infra: Network, **kwargs):
-        # The application takes care of the counting of the ticks, so we just need to call the traffic generation method
-        app.current_tick += 1
-        app.generate_traffic_for_tick(app.current_tick)
-        print(f"[DEBUG GEN] Tick {app.current_tick}: App '{app.id}' has generated {len(app.generated_packets)} packets.")
+        # The application takes care of the counting of the steps, so we just need to call the traffic generation method
+        app.current_step += 1
+        app.generate_traffic_for_step(app.current_step)
+        print(f"[DEBUG GEN] step {app.current_step}: App '{app.id}' has generated {len(app.generated_packets)} packets.")
         return {"packets_generated": len(app.generated_packets) if hasattr(app, 'generated_packets') else 0}

@@ -9,8 +9,8 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
     This is the WORKER. It is called exactly once per step by the engine.
     It executes the heavy routing logic and updates the application state.
     """
-    def __init__(self, tick_duration_s=0.001):
-        self.tick_duration_s = tick_duration_s
+    def __init__(self, step_duration_s=0.001):
+        self.step_duration_s = step_duration_s
         super().__init__(
             name="traffic_routing_execution",
             event_type="application",
@@ -18,12 +18,12 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
         )
 
     def __call__(self, app: NetworkAwareApplication, placement, infra: Network, **kwargs):
-        # 1. Clear the output basket from the previous tick's results
+        # 1. Clear the output basket from the previous step's results
         app.completed_packets.clear()
 
-        current_time_s = app.current_tick * self.tick_duration_s
+        current_time_s = app.current_step * self.step_duration_s
 
-        # 2. Iterate over the packets generated in the current tick
+        # 2. Iterate over the packets generated in the current step
         for packet in app.generated_packets:
             try:
                 src_node = placement.service_placement(service_id=packet.src)
