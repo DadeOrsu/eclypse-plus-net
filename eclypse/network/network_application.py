@@ -43,7 +43,7 @@ class NetworkAwareApplication(Application):
         attr['packets_per_step'] = packets_per_step
         attr['required_throughput_per_step'] = throughput_per_step
         super().add_edge(u_of_edge, v_of_edge, **attr)
-        print(f"Added edge flow {u_of_edge}->{v_of_edge}: {packets_per_step} pkt/step, size {packet_size_bytes}B")
+        self.logger.info(f"Added edge flow {u_of_edge}->{v_of_edge}: {packets_per_step} pkt/step, size {packet_size_bytes}B")
 
     def generate_traffic_for_step(self, step: int) -> list:
         """

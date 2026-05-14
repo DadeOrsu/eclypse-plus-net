@@ -9,7 +9,7 @@ def FaultInjectionEvent(infr: Network, placement_view, **kwargs):
     Event that fires EXACTLY at step 50.
     Removes the link and forces an OSPF recalculation.
     """
-    print("\n[💥 FAULT]step 50: Gateway->R1 link broken! Routes recalculated.\n")
+    infr.logger.warning("\nstep 50: Gateway->R1 link broken! Routes recalculated.\n")
     # remove physically the link from the infrastructure graph. This simulates a real failure and allows us to test the OSPF reaction.
     infr.remove_edge("Gateway", "R1")
     # empty the infrastructure paths cache to force the recalculation of routes.

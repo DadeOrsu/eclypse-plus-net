@@ -29,7 +29,7 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
                 src_node = placement.service_placement(service_id=packet.src)
                 dst_node = placement.service_placement(service_id=packet.dst)
             except KeyError as e:
-                print(f"[DEBUG ROUTER] ERROR PLACEMENT: Unable to map {e}")
+                self.logger.debug(f"ERROR PLACEMENT: Unable to map {e}")
                 continue
 
             packet.src = src_node

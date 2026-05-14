@@ -175,7 +175,7 @@ class Network(Infrastructure):
                 next_hop_idx = self.node_to_idx[next_hop_node]
                 # store the index of the next hop in the matrix
                 self.routing_matrix[src_idx, dest_idx] = next_hop_idx
-        print(f"[OSPF] NumPy routing matrix ({n_nodes}x{n_nodes}) recalculated.")
+        self.logger.warning(f"[OSPF] NumPy routing matrix ({n_nodes}x{n_nodes}) recalculated.")
 
     def get_next_hop(self, current_node: str, final_dest: str):
         # If the nodes are not in the mapping, it means they are not in the graph (maybe failed), so we return None
@@ -251,11 +251,11 @@ class Network(Infrastructure):
         Removes a node. _invalidate_cache will handle the OSPF update.
         """
         super().remove_node(n)
-        print(f"[FAILURE] Node {n} removed.")
+        self.logger.warning(f"[FAILURE] Node {n} removed.")
 
     def remove_edge(self, u: str, v: str):
         """
         Removes an edge. _invalidate_cache will handle the OSPF update.
         """
         super().remove_edge(u, v)
-        print(f"[FAILURE] Link {u} -> {v} removed.")
+        self.logger.warning(f"[FAILURE] Link {u} -> {v} removed.")
