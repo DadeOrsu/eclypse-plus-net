@@ -4,7 +4,7 @@ import numpy as np
 from collections import defaultdict, deque
 from eclypse.graph import Infrastructure
 from network_application import Packet
-from typing import List
+from typing import List, Optional
 from dataclasses import dataclass, field
 from constants import (
     MIN_BANDWIDTH,
@@ -58,8 +58,19 @@ class Network(Infrastructure):
         self.idx_to_node = {}
         self.routing_matrix = np.empty((0, 0), dtype=np.int32)
 
-    def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = 100.0, 
-                 length_km: float = 1.0, propagation_speed_km_s: float = 200000.0, 
+    def _invalidate_cache(self) -> None:
+        """
+        Centralized invalidation method. Overriding this allows us to 
+        automatically trigger OSPF re-routing whenever the topology changes.
+        """
+        # 1. Call the base class logic to clear framework-level caches
+        super()._invalidate_cache()
+        # 2. Automatically re-install routes (proactive approach)
+        # This is triggered by add_edge, remove_node, remove_edge, etc.
+        self.install_shortest_path_routes()
+
+    def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = 100.0,
+                 length_km: float = 1.0, propagation_speed_km_s: float = 200000.0,
                  processing_delay_s: float = 0.0001, **attr):
         """
         Overrides the default add_edge to automatically calculate and inject
@@ -144,6 +155,8 @@ class Network(Infrastructure):
         """
         nodes = list(self.nodes)
         n_nodes = len(nodes)
+        if n_nodes == 0:
+            return
         # Create the conversion maps (String <-> Index)
         self.node_to_idx = {node: idx for idx, node in enumerate(nodes)}
         self.idx_to_node = {idx: node for idx, node in enumerate(nodes)}
@@ -234,13 +247,15 @@ class Network(Infrastructure):
         )
 
     def remove_node(self, n: str):
-        "simulates a node failure of a node and the consequent OSPF recalculation."
+        """
+        Removes a node. _invalidate_cache will handle the OSPF update.
+        """
         super().remove_node(n)
-        print(f"[FAILURE] Node {n} has failed and been removed from the network.")
-        self.install_shortest_path_routes()
+        print(f"[FAILURE] Node {n} removed.")
 
     def remove_edge(self, u: str, v: str):
-        "simulates a link failure and the consequent OSPF recalculation."
+        """
+        Removes an edge. _invalidate_cache will handle the OSPF update.
+        """
         super().remove_edge(u, v)
-        print(f"[FAILURE] Link {u} -> {v} has failed and been removed from the network.")
-        self.install_shortest_path_routes()
+        print(f"[FAILURE] Link {u} -> {v} removed.")
