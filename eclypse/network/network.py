@@ -1,6 +1,7 @@
 import networkx as nx
 import random
 import numpy as np
+from functools import lru_cache
 from collections import defaultdict, deque
 from eclypse.graph import Infrastructure
 from network_application import Packet
@@ -54,9 +55,6 @@ class Network(Infrastructure):
         super().__init__(*args, **kwargs)
         self.link_next_free_time = defaultdict(float)
         self.link_queues = defaultdict(deque)
-        self.node_to_idx = {}
-        self.idx_to_node = {}
-        self.routing_matrix = np.empty((0, 0), dtype=np.int32)
 
     def _invalidate_cache(self) -> None:
         """
@@ -66,8 +64,9 @@ class Network(Infrastructure):
         # 1. Call the base class logic to clear framework-level caches
         super()._invalidate_cache()
         # 2. Automatically re-install routes (proactive approach)
+        self.get_next_hop.cache_clear()
         # This is triggered by add_edge, remove_node, remove_edge, etc.
-        self.install_shortest_path_routes()
+        self.logger.warning("[OSPF] Cache invalidated.")
 
     def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = 100.0,
                  length_km: float = 1.0, propagation_speed_km_s: float = 200000.0,
@@ -149,46 +148,23 @@ class Network(Infrastructure):
             queue_length_packets=current_queue_length
         )
 
-    def install_shortest_path_routes(self):
+    @lru_cache(maxsize=10000)
+    def get_next_hop(self, current_node: str, final_dest: str) -> Optional[str]:
         """
-        Installs routing tables using a highly optimized NumPy matrix.
+        Calculate the next hop ONLY if needed.
+        The @lru_cache decorator stores up to 10,000 frequent routes in RAM.
         """
-        nodes = list(self.nodes)
-        n_nodes = len(nodes)
-        if n_nodes == 0:
-            return
-        # Create the conversion maps (String <-> Index)
-        self.node_to_idx = {node: idx for idx, node in enumerate(nodes)}
-        self.idx_to_node = {idx: node for idx, node in enumerate(nodes)}
-        # Initialize the NxN matrix filled with -1 (no route)
-        self.routing_matrix = np.full((n_nodes, n_nodes), -1, dtype=np.int32)
-        # Calculate all shortest paths in a single pass! (Super fast)
-        all_paths = dict(nx.all_pairs_dijkstra_path(self, weight='latency')) # fare grafo con rustworkx dopo test con tanti nodi
-        # Populate the matrix
-        for source, paths in all_paths.items():
-            src_idx = self.node_to_idx[source]
-            for dest, path in paths.items():
-                if source == dest:
-                    continue  # no hop needed for same-node routing
-                dest_idx = self.node_to_idx[dest]
-                next_hop_node = path[1]  # the next hop
-                next_hop_idx = self.node_to_idx[next_hop_node]
-                # store the index of the next hop in the matrix
-                self.routing_matrix[src_idx, dest_idx] = next_hop_idx
-        self.logger.warning(f"[OSPF] NumPy routing matrix ({n_nodes}x{n_nodes}) recalculated.")
-
-    def get_next_hop(self, current_node: str, final_dest: str):
-        # If the nodes are not in the mapping, it means they are not in the graph (maybe failed), so we return None
-        if current_node not in self.node_to_idx or final_dest not in self.node_to_idx:
+        # If the current node does not exist in the graph, or the destination is invalid, return None
+        if current_node not in self.nodes or final_dest not in self.nodes:
             return None
-        src_idx = self.node_to_idx[current_node]
-        dst_idx = self.node_to_idx[final_dest]
-        next_hop_idx = self.routing_matrix[src_idx, dst_idx]
-        # If the value is -1, it means there is no route from current_node to final_dest
-        if next_hop_idx == -1:
+        try:
+            # Calculate the shortest path on demand using latency as the weight
+            path = nx.shortest_path(self, source=current_node, target=final_dest, weight='latency')
+            if len(path) > 1:
+                return path[1]
+        except nx.NetworkXNoPath:
             return None
-        # Convert the integer index back to the textual node name
-        return self.idx_to_node[next_hop_idx]
+        return None
 
     def packet_route(self, packet: Packet, start_time: float):
         """
