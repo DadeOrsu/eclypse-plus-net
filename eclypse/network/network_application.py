@@ -4,9 +4,7 @@ from dataclasses import dataclass
 
 @dataclass(slots=True)
 class Packet:
-    """
-    Data class to represent a network packet with its attributes.
-    """
+    """Data class to represent a network packet with its attributes."""
     id: int
     src: str
     dst: str
@@ -15,12 +13,13 @@ class Packet:
 
 
 class NetworkAwareApplication(Application):
-    """
-    Extension of the standard ECLYPSE application class that incorporates
+    """Extension of the standard ECLYPSE application class that incorporates.
+
     network traffic characteristics.
     """
 
     def __init__(self, *args, **kwargs):
+        """Initializes the NetworkAwareApplication and sets up the state for packet generation."""
         super().__init__(*args, **kwargs)
         # Internal counter to give unique IDs to generated packets
         self._packet_counter = 0
@@ -30,9 +29,10 @@ class NetworkAwareApplication(Application):
 
     def add_edge(self, u_of_edge: str, v_of_edge: str, packet_size_bytes: int = 1500,
                  packets_per_step: int = 1, **attr):
-        """
-        Overrides the default add_edge to automatically validate and inject
-        traffic parameters (packet size, rate, and throughput) for the logical flow.
+        """Overrides the default add_edge.
+
+        It automatically validates and injects traffic parameters (packet size, rate, and
+        throughput) for the logical flow.
         """
         if packet_size_bytes <= 0:
             raise ValueError(f"Packet size must be > 0. Found: {packet_size_bytes}")
@@ -45,17 +45,16 @@ class NetworkAwareApplication(Application):
         super().add_edge(u_of_edge, v_of_edge, **attr)
         self.logger.info(f"Added edge flow {u_of_edge}->{v_of_edge}: {packets_per_step} pkt/step, size {packet_size_bytes}B")
 
-    def generate_traffic_for_step(self, step: int) -> list:
-        """
-        Reads the flow definitions stored in the edges and produces a list of
-        packet dictionaries for the current simulation step.
+    def generate_traffic_for_step(self, step: int) -> None:
+        """Generate traffic for the current step based on the defined flows in the application graph.
+
+        Reads the flow definitions stored in the edges and produces a list of packet dictionaries for the current simulation step.
 
         Args:
             step (int): The current simulation step number.
 
         Returns:
-            list: A list of dictionaries, where each dict represents a packet
-                  ready to be routed.
+            None
         """
         self.generated_packets = []
 
