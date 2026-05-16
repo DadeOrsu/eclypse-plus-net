@@ -4,7 +4,9 @@ from network_application import NetworkAwareApplication
 from network import Network
 
 class PacketGenerationEvent(EclypseEvent):
+    """Event that generates network packets to be routed."""
     def __init__(self):
+        """Initializes the PacketGenerationEvent with a cascade trigger on simulation steps."""
         super().__init__(
             name="packet_generation",
             event_type="application",
@@ -12,7 +14,7 @@ class PacketGenerationEvent(EclypseEvent):
         )
 
     def __call__(self, app: NetworkAwareApplication, placement, infra: Network, **kwargs):
-        # The application takes care of the counting of the steps, so we just need to call the traffic generation method
+        """Generates packets for the current simulation step based on the defined flows in the application graph."""
         app.current_step += 1
         app.generate_traffic_for_step(app.current_step)
         self.logger.debug(f"step {app.current_step}: App '{app.id}' has generated {len(app.generated_packets)} packets.")
