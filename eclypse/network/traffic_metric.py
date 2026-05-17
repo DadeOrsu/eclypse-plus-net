@@ -1,17 +1,40 @@
+"""Module containing the traffic routing metric for the ECLYPSE framework."""
+
 from eclypse.report.metrics.metric import application
 from network_application import NetworkAwareApplication
 from network import Network
 
 @application(name="traffic_routing", activates_on="step")
 class TrafficRoutingMetric:
-    """
-    This is the OBSERVER. It is called by the Reporter.
-    It performs no complex calculations; it simply reads the completed packets.
+    """Observer metric that extracts routing results from completed packets.
+
+    This metric is called by the Reporter. It performs no complex calculations;
+    it simply reads the completed packets processed during the current step and
+    formats their delay and hop information for reporting.
     """
     def __init__(self, step_duration_s=0.001):
+        """Initialize the traffic routing metric.
+
+        Args:
+            step_duration_s (float): The duration of a single simulation step in seconds.
+                Defaults to 0.001.
+        """
         self.step_duration_s = step_duration_s
 
     def __call__(self, app: NetworkAwareApplication, placement, infra: Network, **kwargs):
+        """Extract and format metrics from the application's completed packets.
+
+        Args:
+            app (NetworkAwareApplication): The application instance containing the
+                'completed_packets' attribute.
+            placement: The placement service used in the simulation.
+            infra (Network): The network infrastructure model.
+            **kwargs: Additional keyword arguments provided by the framework.
+
+        Returns:
+            dict | None: A dictionary containing the flattened metrics for the current
+                step, or None if no packets were completed.
+        """
         step_results = {}
 
         # We fetch the "output basket" filled by the Execution Event
