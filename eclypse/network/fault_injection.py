@@ -1,3 +1,5 @@
+"""This module defines a fault injection event that simulates a link failure in the network."""
+
 from network import Network
 from eclypse.workflow.event import once_at
 
