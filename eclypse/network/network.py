@@ -1,3 +1,5 @@
+"""Module containing the network infrastructure extension for the ECLYPSE framework."""
+
 import networkx as nx
 import random
 from methodtools import lru_cache
@@ -14,7 +16,7 @@ from constants import (
 
 @dataclass(slots=True)
 class DelayMetrics:
-    """Metrics for calculating delays in the network."""
+    """Represent the delay metrics for a network packet traversing a link."""
     processing_delay: float
     queue_delay: float
     transmission_delay: float
@@ -26,7 +28,7 @@ class DelayMetrics:
 
 @dataclass(slots=True)
 class HopInfo:
-    """Detailed information about a single hop in the packet's path."""
+    """Represent detailed information about a single hop in a packet's path."""
     hop: str
     processing_ms: float
     queue_ms: float
@@ -38,7 +40,7 @@ class HopInfo:
 
 @dataclass(slots=True)
 class RoutingResult:
-    """Result of routing a packet through the network."""
+    """Represent the result of routing a packet through the network."""
     status: str
     reason: str = ""
     path: list[str] = field(default_factory=list)
@@ -48,26 +50,35 @@ class RoutingResult:
 
 
 class Network(Infrastructure):
-    """Extension of the Infrastructure model of ECLYPSE.
+    """Extend the Infrastructure model of ECLYPSE to simulate physical queuing.
 
-    This class simulates a network of routers using queuing logic,
-    with physical packet queuing.
+    This class simulates a network of routers using a queuing logic,
+    managing physical packet delays and an on-demand LRU cache for OSPF routing.
     """
     def __init__(self, *args, **kwargs):
-        """Initializes the Network infrastructure and sets up data structures for queuing and OSPF caching."""
+        """Initialize the Network infrastructure.
+
+        Sets up the underlying ECLYPSE infrastructure and initializes the
+        data structures required for tracking link queues and free times.
+
+        Args:
+            *args: Variable length argument list passed to the base class.
+            **kwargs: Arbitrary keyword arguments passed to the base class.
+        """
         super().__init__(*args, **kwargs)
         self.link_next_free_time = defaultdict(float)
         self.link_queues = defaultdict(deque)
 
     def _invalidate_cache(self) -> None:
-        """Centralized invalidation method.
+        """Invalidate the network routing cache centrally.
 
-        Overriding this allows us to automatically trigger OSPF re-routing whenever the topology
-        changes.
+        Overriding this method allows the network to automatically trigger
+        OSPF re-routing (by flushing the LRU cache) whenever the topology
+        changes due to node or edge additions/removals.
         """
-        # 1. Call the base class logic to clear framework-level caches
+        # Call the base class logic to clear framework-level caches
         super()._invalidate_cache()
-        # 2. Automatically re-install routes (proactive approach)
+        # Automatically re-install routes (proactive approach)
         self.get_next_hop.cache_clear()
         # This is triggered by add_edge, remove_node, remove_edge, etc.
         self.logger.warning("[OSPF] Cache invalidated.")
@@ -75,10 +86,22 @@ class Network(Infrastructure):
     def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = 100.0,
                  length_km: float = 1.0, propagation_speed_km_s: float = 200000.0,
                  processing_delay_s: float = 0.0001, **attr):
-        """Overrides the default add_edge.
+        """Add an edge to the network with queuing parameters.
 
-        It automatically calculates and injects queuing parameters (bandwidth in bps, latency,
-        propagation, processing).
+        Automatically calculates and injects physical queuing parameters
+        such as bandwidth in bps and latency before passing the data to
+        the underlying graph infrastructure.
+
+        Args:
+            u_of_edge (str): The source node ID of the edge.
+            v_of_edge (str): The destination node ID of the edge.
+            bandwidth_mbps (float): The link bandwidth in Mbps. Defaults to 100.0.
+            length_km (float): The length of the physical link in km. Defaults to 1.0.
+            propagation_speed_km_s (float): The signal propagation speed in km/s.
+                Defaults to 200000.0.
+            processing_delay_s (float): The node processing delay in seconds.
+                Defaults to 0.0001.
+            **attr: Additional attributes to apply to the edge.
         """
         attr['parameters'] = bandwidth_mbps * 1_000_000
         attr['bandwidth_mbps'] = bandwidth_mbps
@@ -89,28 +112,20 @@ class Network(Infrastructure):
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
     def delay(self, u: str, v: str, edge_data: dict, packet: Packet, current_time: float) -> DelayMetrics:
-        """Calculates the delay components for a single packet traversing a specific link (u->v).
+        """Calculate the delay components for a packet traversing a specific link.
 
         Args:
             u (str): The source node ID of the link.
             v (str): The destination node ID of the link.
-            edge_data (dict): The attributes of the edge (u, v) containing at least 'bandwidth_mbps'
-                ,'length_km', 'propagation_speed_km_s', and 'processing_delay_s'.
-            packet (Packet): The packet object containing at least 'size' attribute.
+            edge_data (dict): The attributes of the edge containing bandwidth, length,
+                speed, and processing delay specifications.
+            packet (Packet): The packet being transmitted.
             current_time (float): The simulation time at which the packet arrives at node 'u'.
 
         Returns:
-            DelayMetrics | None: A dataclass containing the following fields:
-
-            - 'processing_delay': Time spent processing the packet at node 'u' (seconds).
-            - 'queue_delay': Time spent waiting in the buffer (seconds).
-            - 'transmission_delay': Time spent transmitting the packet bits (seconds).
-            - 'propagation_delay': Time spent travelling the physical medium (seconds).
-            - 'total_delay': Sum of all delay components (seconds).
-            - 'finish_time': Simulation time when the packet fully arrives at node 'v'.
-            - 'queue_length_packets': Number of packets in the queue at the time of arrival.
-
-            Returns None if the edge (u, v) does not exist.
+            DelayMetrics | None: A dataclass containing the calculated processing, queuing,
+                transmission, and propagation delays, as well as the queue length. Returns
+                None if the delay calculation cannot be performed.
         """
         d_proc = edge_data.get("processing_delay_s", 0.0001)
         time_after_processing = current_time + d_proc
@@ -157,11 +172,19 @@ class Network(Infrastructure):
 
     @lru_cache(maxsize=10000)
     def get_next_hop(self, current_node: str, final_dest: str) -> str | None:
-        """Calculate the next hop ONLY if needed.
+        """Retrieve the next hop for a packet on-demand.
 
-        The @lru_cache decorator stores up to 10,000 frequent routes in memory.
+        Utilizes an LRU cache to store up to 10,000 frequent routes, computing
+        the shortest path via Dijkstra's algorithm only upon a cache miss.
+
+        Args:
+            current_node (str): The ID of the node where the packet currently resides.
+            final_dest (str): The ID of the packet's final destination node.
+
+        Returns:
+            str | None: The ID of the next hop node, or None if no valid path exists.
         """
-        # If the current node does not exist in the graph, or the destination is invalid, return None
+        # If the current node does not exist in the graph or the destination is invalid returns None
         if current_node not in self.nodes or final_dest not in self.nodes:
             return None
         try:
@@ -174,27 +197,18 @@ class Network(Infrastructure):
         return None
 
     def packet_route(self, packet: Packet, start_time: float) -> RoutingResult:
-        """Simulates the routing of a single packet from its source to its destination.
+        """Simulate the physical routing of a single packet through the network.
 
-        Calculates all delay components and handles potential failures (like link
-        or node failures).
+        Calculates end-to-end traversal, aggregating delay components at each hop,
+        and manages link or node failures encountered along the calculated path.
 
         Args:
-            packet (Packet): The packet to be routed, containing at least 'src', 'dst',
-                and 'size' attributes.
-            start_time (float): The simulation time at which the packet is generated
-                at the source node.
+            packet (Packet): The packet to be routed.
+            start_time (float): The simulation time when the packet is generated.
 
         Returns:
-            RoutingResult: A dataclass containing the routing status, path taken, end time,
-            total end-to-end delay, and detailed hop information.
-
-            The dataclass includes:
-            - status: "DELIVERED" if the packet reaches its destination.
-            - path: List of nodes representing the path taken by the packet until delivery or failure.
-            - end_time: The simulation time at which the packet is delivered or dropped.
-            - total_e2e_delay: Total end-to-end delay experienced by the packet (seconds).
-            - hops: A list of HopInfo dataclasses detailing each hop's delay components and queue.
+            RoutingResult: The aggregated result of the packet's journey, including
+                delivery status, path taken, total delay, and hop-by-hop metrics.
         """
         current_node = packet.src
         target = packet.dst
@@ -234,17 +248,20 @@ class Network(Infrastructure):
         )
 
     def remove_node(self, n: str):
-        """Removes a node.
+        """Remove a node from the network and trigger an OSPF cache update.
 
-        _invalidate_cache will handle the OSPF update.
+        Args:
+            n (str): The ID of the node to remove.
         """
         super().remove_node(n)
         self.logger.warning(f"[FAILURE] Node {n} removed.")
 
     def remove_edge(self, u: str, v: str):
-        """Removes an edge.
+        """Remove an edge from the network and trigger an OSPF cache update.
 
-        _invalidate_cache will handle the OSPF update.
+        Args:
+            u (str): The source node ID of the edge.
+            v (str): The destination node ID of the edge.
         """
         super().remove_edge(u, v)
         self.logger.warning(f"[FAILURE] Link {u} -> {v} removed.")
