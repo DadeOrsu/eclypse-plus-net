@@ -103,7 +103,6 @@ class Network(Infrastructure):
                 Defaults to 0.0001.
             **attr: Additional attributes to apply to the edge.
         """
-        attr['parameters'] = bandwidth_mbps * 1_000_000
         attr['bandwidth_mbps'] = bandwidth_mbps
         attr['length_km'] = length_km
         attr['propagation_speed_km_s'] = propagation_speed_km_s
