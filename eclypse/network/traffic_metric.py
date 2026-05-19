@@ -37,7 +37,6 @@ class TrafficRoutingMetric:
         """
         step_results = {}
 
-        # We fetch the "output basket" filled by the Execution Event
         if app.completed_packets:
             current_time_s = app.current_step * self.step_duration_s
 
@@ -50,13 +49,9 @@ class TrafficRoutingMetric:
                     step_results[f"{prefix}_Start_Time"] = current_time_s
                     step_results[f"{prefix}_End_Time"] = result.end_time
                     step_results[f"{prefix}_Total_Delay_ms"] = result.total_e2e_delay * 1000
-
-                    # Flat saving of Hops data
                     for i, h in enumerate(result.hops):
                         hop_prefix = f"{prefix}_Hop_{i+1}"
                         step_results[f"{hop_prefix}_hop"] = h.hop
-
-                        # Direct attribute access via strong typing
                         step_results[f"{hop_prefix}_processing_ms"] = h.processing_ms
                         step_results[f"{hop_prefix}_queue_ms"] = h.queue_ms
                         step_results[f"{hop_prefix}_transmission_ms"] = h.transmission_ms
