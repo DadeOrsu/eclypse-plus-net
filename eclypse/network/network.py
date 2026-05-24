@@ -107,7 +107,7 @@ class Network(Infrastructure):
         attr['length_km'] = length_km
         attr['propagation_speed_km_s'] = propagation_speed_km_s
         attr['processing_delay_s'] = processing_delay_s
-        attr['latency'] = (length_km / propagation_speed_km_s) * 1000.0
+        attr['cost'] = 1/(bandwidth_mbps * 1_000_000)  # Cost for OSPF routing (inverse of bandwidth)
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
     def delay(self, u: str, v: str, edge_data: dict, packet: Packet, current_time: float) -> DelayMetrics:
@@ -141,14 +141,13 @@ class Network(Infrastructure):
         L = packet.size * 8
         R = edge_data.get("bandwidth_mbps", MIN_BANDWIDTH)
         R = R * 1_000_000
-        d_trans_theoretical = L / R if R > 0 else 0.0
-        d_trans = random.expovariate(1.0 / d_trans_theoretical) if d_trans_theoretical > 0 else 0.0
+        d_transm= L / R if R > 0 else 0.0
 
         last_free_time = self.link_next_free_time[(u, v)]
         service_start_time = max(time_after_processing, last_free_time)
         d_queue = service_start_time - time_after_processing
 
-        service_finish_time = service_start_time + d_trans
+        service_finish_time = service_start_time + d_transm
         self.link_next_free_time[(u, v)] = service_finish_time
 
         # Insert the packet into the queue with its expected finish time
@@ -157,12 +156,12 @@ class Network(Infrastructure):
         s = edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
         d_prop = d / s if s > 0 else 0.0
 
-        total_delay = d_proc + d_queue + d_trans + d_prop
+        total_delay = d_proc + d_queue + d_transm + d_prop
 
         return DelayMetrics(
             processing_delay=d_proc,
             queue_delay=d_queue,
-            transmission_delay=d_trans,
+            transmission_delay=d_transm,
             propagation_delay=d_prop,
             total_delay=total_delay,
             finish_time=service_finish_time + d_prop,
@@ -187,8 +186,8 @@ class Network(Infrastructure):
         if current_node not in self.nodes or final_dest not in self.nodes:
             return None
         try:
-            # Calculate the shortest path on demand using latency as the weight
-            path = nx.shortest_path(self, source=current_node, target=final_dest, weight='latency')
+            # Calculate the shortest path on demand using cost as the weight
+            path = nx.shortest_path(self, source=current_node, target=final_dest, weight='cost')
             if len(path) > 1:
                 return path[1]
         except nx.NetworkXNoPath:
