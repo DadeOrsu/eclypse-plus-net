@@ -11,19 +11,6 @@ from constants import (
     MIN_PROPAGATION_SPEED
 )
 
-
-@dataclass(slots=True)
-class DelayMetrics:
-    """Represent the delay metrics for a network packet traversing a link."""
-    processing_delay: float
-    queue_delay: float
-    transmission_delay: float
-    propagation_delay: float
-    total_delay: float
-    finish_time: float
-    queue_length_packets: int
-
-
 @dataclass(slots=True)
 class HopInfo:
     """Represent detailed information about a single hop in a packet's path."""
@@ -154,16 +141,14 @@ class Network(Infrastructure):
         s = edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
         d_prop = d / s if s > 0 else 0.0
 
-        total_delay = d_proc + d_queue + d_transm + d_prop
-
-        return DelayMetrics(
-            processing_delay=d_proc,
-            queue_delay=d_queue,
-            transmission_delay=d_transm,
-            propagation_delay=d_prop,
-            total_delay=total_delay,
-            finish_time=service_finish_time + d_prop,
-            queue_length_packets=current_queue_length
+        return HopInfo(
+            hop=f"{u}->{v}",
+            processing_ms=d_proc * 1000.0,
+            queue_ms=d_queue * 1000.0,
+            transmission_ms=d_transm * 1000.0,
+            propagation_ms=d_prop * 1000.0,
+            queue_length=current_queue_length,
+            arrival_at_next=service_finish_time + d_prop
         )
 
     def packet_route(self, packet: Packet, start_time: float) -> RoutingResult:
@@ -181,21 +166,9 @@ class Network(Infrastructure):
 
         # Iterate over the path and calculate delays for each hop using the delay function
         for u, v, edge_data in full_path:
-            stats = self.delay(u, v, edge_data, packet, current_t)
-
-            hop = HopInfo(
-                hop=f"{u}->{v}",
-                processing_ms=stats.processing_delay * 1000.0,
-                queue_ms=stats.queue_delay * 1000.0,
-                transmission_ms=stats.transmission_delay * 1000.0,
-                propagation_ms=stats.propagation_delay * 1000.0,
-                queue_length=stats.queue_length_packets,
-                arrival_at_next=stats.finish_time
-            )
-            hop_details.append(hop)
-
-            # Update the current time to reflect the completion of this hop before moving to the next
-            current_t = stats.finish_time
+            hop_stats = self.delay(u, v, edge_data, packet, current_t)
+            hop_details.append(hop_stats)
+            current_t = hop_stats.arrival_at_next
             path_taken.append(v)
 
         # Return the result of the routing simulation with all the collected metrics and information
