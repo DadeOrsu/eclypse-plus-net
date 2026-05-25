@@ -1,8 +1,6 @@
 """Module containing the network infrastructure extension for the ECLYPSE framework."""
 
 import networkx as nx
-import random
-from methodtools import lru_cache
 from collections import defaultdict, deque
 from eclypse.graph import Infrastructure
 from network_application import Packet
@@ -48,6 +46,9 @@ class RoutingResult:
     total_e2e_delay: float = 0.0
     hops: list[HopInfo] = field(default_factory=list)
 
+def ospf_path_algorithm(g: nx.Graph, source: str, target: str) -> list[str]:
+    """Custom path algorithm for ECLYPSE to strictly use OSPF 'cost'."""
+    return nx.dijkstra_path(g, source, target, weight='cost')
 
 class Network(Infrastructure):
     """Extend the Infrastructure model of ECLYPSE to simulate physical queuing.
@@ -65,9 +66,11 @@ class Network(Infrastructure):
             *args: Variable length argument list passed to the base class.
             **kwargs: Arbitrary keyword arguments passed to the base class.
         """
+        kwargs['path_algorithm'] = ospf_path_algorithm
         super().__init__(*args, **kwargs)
         self.link_next_free_time = defaultdict(float)
         self.link_queues = defaultdict(deque)
+
 
     def _invalidate_cache(self) -> None:
         """Invalidate the network routing cache centrally.
@@ -78,8 +81,6 @@ class Network(Infrastructure):
         """
         # Call the base class logic to clear framework-level caches
         super()._invalidate_cache()
-        # Automatically re-install routes (proactive approach)
-        self.get_next_hop.cache_clear()
         # This is triggered by add_edge, remove_node, remove_edge, etc.
         self.logger.warning("[OSPF] Cache invalidated.")
 
@@ -168,62 +169,25 @@ class Network(Infrastructure):
             queue_length_packets=current_queue_length
         )
 
-    @lru_cache(maxsize=10000)
-    def get_next_hop(self, current_node: str, final_dest: str) -> str | None:
-        """Retrieve the next hop for a packet on-demand.
-
-        Utilizes an LRU cache to store up to 10,000 frequent routes, computing
-        the shortest path via Dijkstra's algorithm only upon a cache miss.
-
-        Args:
-            current_node (str): The ID of the node where the packet currently resides.
-            final_dest (str): The ID of the packet's final destination node.
-
-        Returns:
-            str | None: The ID of the next hop node, or None if no valid path exists.
-        """
-        # If the current node does not exist in the graph or the destination is invalid returns None
-        if current_node not in self.nodes or final_dest not in self.nodes:
-            return None
-        try:
-            # Calculate the shortest path on demand using cost as the weight
-            path = nx.shortest_path(self, source=current_node, target=final_dest, weight='cost')
-            if len(path) > 1:
-                return path[1]
-        except nx.NetworkXNoPath:
-            return None
-        return None
-
     def packet_route(self, packet: Packet, start_time: float) -> RoutingResult:
-        """Simulate the physical routing of a single packet through the network.
+        """Simulate the physical routing of a single packet using ECLYPSE native paths."""
+        # Requests the path from ECLYPSE using the OSPF 'cost' metric
+        full_path = self.path(packet.src, packet.dst, cost_attr='cost')
 
-        Calculates end-to-end traversal, aggregating delay components at each hop,
-        and manages link or node failures encountered along the calculated path.
+        # If there is no path, we return a failure result immediately
+        if full_path is None:
+            return RoutingResult(status="FAILED", reason=f"No route from {packet.src} to {packet.dst}")
 
-        Args:
-            packet (Packet): The packet to be routed.
-            start_time (float): The simulation time when the packet is generated.
-
-        Returns:
-            RoutingResult: The aggregated result of the packet's journey, including
-                delivery status, path taken, total delay, and hop-by-hop metrics.
-        """
-        current_node = packet.src
-        target = packet.dst
         current_t = start_time
         hop_details = []
-        path_taken = [current_node]
+        path_taken = [packet.src]
 
-        for _ in range(20):
-            if current_node == target:
-                break
-
-            next_node = self.get_next_hop(current_node, target)
-            edge_data = self.edges[current_node, next_node]
-            stats = self.delay(current_node, next_node, edge_data, packet, current_t)
+        # Iterate over the path and calculate delays for each hop using the delay function
+        for u, v, edge_data in full_path:
+            stats = self.delay(u, v, edge_data, packet, current_t)
 
             hop = HopInfo(
-                hop=f"{current_node}->{next_node}",
+                hop=f"{u}->{v}",
                 processing_ms=stats.processing_delay * 1000.0,
                 queue_ms=stats.queue_delay * 1000.0,
                 transmission_ms=stats.transmission_delay * 1000.0,
@@ -233,10 +197,11 @@ class Network(Infrastructure):
             )
             hop_details.append(hop)
 
+            # Update the current time to reflect the completion of this hop before moving to the next
             current_t = stats.finish_time
-            current_node = next_node
-            path_taken.append(current_node)
+            path_taken.append(v)
 
+        # Return the result of the routing simulation with all the collected metrics and information
         return RoutingResult(
             status="DELIVERED",
             path=path_taken,
