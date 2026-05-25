@@ -86,7 +86,7 @@ class Network(Infrastructure):
 
     def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = 100.0,
                  length_km: float = 1.0, propagation_speed_km_s: float = 200000.0,
-                 processing_delay_s: float = 0.0001, **attr):
+                 **attr):
         """Add an edge to the network with queuing parameters.
 
         Automatically calculates and injects physical queuing parameters
@@ -100,14 +100,11 @@ class Network(Infrastructure):
             length_km (float): The length of the physical link in km. Defaults to 1.0.
             propagation_speed_km_s (float): The signal propagation speed in km/s.
                 Defaults to 200000.0.
-            processing_delay_s (float): The node processing delay in seconds.
-                Defaults to 0.0001.
             **attr: Additional attributes to apply to the edge.
         """
         attr['bandwidth_mbps'] = bandwidth_mbps
         attr['length_km'] = length_km
         attr['propagation_speed_km_s'] = propagation_speed_km_s
-        attr['processing_delay_s'] = processing_delay_s
         attr['cost'] = 1/(bandwidth_mbps * 1_000_000)  # Cost for OSPF routing (inverse of bandwidth)
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
@@ -127,7 +124,7 @@ class Network(Infrastructure):
                 transmission, and propagation delays, as well as the queue length. Returns
                 None if the delay calculation cannot be performed.
         """
-        d_proc = edge_data.get("processing_delay_s", 0.0001)
+        d_proc = self.processing_time(u, v)
         time_after_processing = current_time + d_proc
 
         queue = self.link_queues[(u, v)]
