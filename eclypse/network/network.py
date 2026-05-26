@@ -55,7 +55,6 @@ class Network(Infrastructure):
         """
         kwargs['path_algorithm'] = ospf_path_algorithm
         super().__init__(*args, **kwargs)
-        self.link_next_free_time = defaultdict(float)
         self.link_queues = defaultdict(deque)
 
 
@@ -95,7 +94,7 @@ class Network(Infrastructure):
         attr['cost'] = 1/(bandwidth_mbps * 1_000_000)  # Cost for OSPF routing (inverse of bandwidth)
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
-    def delay(self, u: str, v: str, edge_data: dict, packet: Packet, current_time: float) -> DelayMetrics:
+    def delay(self, u: str, v: str, edge_data: dict, packet: Packet, current_time: float) -> HopInfo | None:
         """Calculate the delay components for a packet traversing a specific link.
 
         Args:
@@ -107,7 +106,7 @@ class Network(Infrastructure):
             current_time (float): The simulation time at which the packet arrives at node 'u'.
 
         Returns:
-            DelayMetrics | None: A dataclass containing the calculated processing, queuing,
+            HopInfo | None: A dataclass containing the calculated processing, queuing,
                 transmission, and propagation delays, as well as the queue length. Returns
                 None if the delay calculation cannot be performed.
         """
@@ -115,28 +114,29 @@ class Network(Infrastructure):
         time_after_processing = current_time + d_proc
 
         queue = self.link_queues[(u, v)]
-
+        R = edge_data.get("bandwidth_mbps", MIN_BANDWIDTH) * 1_000_000
         # We discard packets that have already completed transmission.
         # queue[0][0] accesses the `service_finish_time` of the first packet in the queue.
         while queue and queue[0][0] <= time_after_processing:
             queue.popleft()
 
         current_queue_length = len(queue)
-        # delay calculations using packet.size
+        # Queuing delay calculation as the sum of remaining transmission times of packets still
+        # in the queue
+        d_queue = 0.0
+        if R > 0:
+            for _, queued_packet in queue:
+                L_i = queued_packet.size * 8
+                d_queue += (L_i / R)
         L = packet.size * 8
-        R = edge_data.get("bandwidth_mbps", MIN_BANDWIDTH)
-        R = R * 1_000_000
-        d_transm= L / R if R > 0 else 0.0
+        # Transmission delay calculation for the current packet
+        d_transm = (L / R) if R > 0 else 0.0
 
-        last_free_time = self.link_next_free_time[(u, v)]
-        service_start_time = max(time_after_processing, last_free_time)
-        d_queue = service_start_time - time_after_processing
+        service_finish_time = time_after_processing + d_queue + d_transm
 
-        service_finish_time = service_start_time + d_transm
-        self.link_next_free_time[(u, v)] = service_finish_time
-
-        # Insert the packet into the queue with its expected finish time
         queue.append((service_finish_time, packet))
+
+        # Propagation delay calculation
         d = edge_data.get("length_km", MIN_LENGTH_KM)
         s = edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
         d_prop = d / s if s > 0 else 0.0
