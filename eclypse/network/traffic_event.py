@@ -1,10 +1,35 @@
 """Module containing the traffic routing execution event for the ECLYPSE framework."""
 
+import random
+from collections import defaultdict
 from eclypse.workflow.event import EclypseEvent
 from eclypse.workflow.trigger import CascadeTrigger
 from network_application import NetworkAwareApplication
 from network import Network
 
+def build_probabilistic_queue(incoming_queues: dict[str, list], bandwidths: dict[str, float]) -> list:
+    """It merges the input queues in a probabilistic manner based on bandwidth.
+
+    Implement a probabilistic multiplexer: it extracts packets from the input
+    queues by tossing a 'weighted coin' based on the bandwidth values.
+    """
+    merged_queue = []
+
+    # We continue until there is at least one packet in any of the queues.
+    while any(incoming_queues.values()):
+        # We filter out sources that still have packages
+        active_sources = [src for src, q in incoming_queues.items() if len(q) > 0]
+        # We retrieve the associated weights (bandwidth)
+        active_weights = [bandwidths[src] for src in active_sources]
+
+        # Probabilistic extraction of the packet with P = Bandwidth / Sum(Bandwidths)
+        chosen_source = random.choices(active_sources, weights=active_weights, k=1)[0]
+
+        # Remove the packet from the original queue and insert it into the merged queue
+        packet = incoming_queues[chosen_source].pop(0)
+        merged_queue.append(packet)
+
+    return merged_queue
 
 class TrafficRoutingExecutionEvent(EclypseEvent):
     """Worker event that executes routing logic and updates application state.
@@ -40,10 +65,11 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
         """
         # Clear the output basket from the previous step's results
         app.completed_packets.clear()
-
         current_time_s = app.current_step * self.step_duration_s
 
-        # Iterate over the packets generated in the current step
+        # Group packets by their source node after resolving their placements
+        incoming_queues = defaultdict(list)
+
         for packet in app.generated_packets:
             try:
                 src_node = placement.service_placement(service_id=packet.src)
@@ -55,10 +81,38 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
             packet.src = src_node
             packet.dst = dst_node
 
-            result = infra.packet_route(packet, current_time_s)
+            # Put them in the separate queue for this specific source node
+            incoming_queues[src_node].append(packet)
 
-            # Append the packet and its routing result to the completed packets basket
+        # Calculate the bandwidths (the Weights) for each source node
+        bws = {}
+        for src_node in incoming_queues:
+            # Read the outgoing links from this node in the infrastructure.
+            # Use the sum of the outgoing capacities as the weight for the extraction.
+            out_edges = infra.out_edges(src_node, data=True)
+            total_bw = sum(d.get('bandwidth_mbps', 100.0) for _, _, d in out_edges)
+
+            # Avoid division by zero if a node has no outgoing links
+            bws[src_node] = total_bw if total_bw > 0 else 1.0
+
+        # Pass the split tails and weights to our function, which will return them
+        # shuffled according to the probabilities of the academic formula.
+        shuffled_packets = build_probabilistic_queue(incoming_queues, bws)
+
+        if shuffled_packets:
+            # Create a list with only the source node names for easy reading
+            source_order = [p.src for p in shuffled_packets]
+
+            # Log the current step and the shuffled sequence
+            self.logger.info(
+                f"[STEP {app.current_step}] "
+                f"Total packets: {len(shuffled_packets)} | "
+                f"Extraction order: {source_order}"
+            )
+        # Pass the shuffled list to the routing engine.
+        for packet in shuffled_packets:
+            result = infra.packet_route(packet, current_time_s)
             app.completed_packets.append((packet, result))
 
-        # Empty the generated packets basket for the next step
+        # Empty the basket of generated packages for the next step
         app.generated_packets.clear()
