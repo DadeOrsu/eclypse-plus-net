@@ -58,18 +58,6 @@ class Network(Infrastructure):
         self.link_queues = defaultdict(deque)
 
 
-    def _invalidate_cache(self) -> None:
-        """Invalidate the network routing cache centrally.
-
-        Overriding this method allows the network to automatically trigger
-        OSPF re-routing (by flushing the LRU cache) whenever the topology
-        changes due to node or edge additions/removals.
-        """
-        # Call the base class logic to clear framework-level caches
-        super()._invalidate_cache()
-        # This is triggered by add_edge, remove_node, remove_edge, etc.
-        self.logger.warning("[OSPF] Cache invalidated.")
-
     def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = 100.0,
                  length_km: float = 1.0, propagation_speed_km_s: float = 200000.0,
                  **attr):
