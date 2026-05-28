@@ -1,6 +1,10 @@
 import numpy as np
 from eclypse.graph import Application
 from dataclasses import dataclass
+from constants import(
+    DEFAULT_AVG_PACKETS_PER_STEP,
+    DEFAULT_PACKET_SIZE_BYTES
+)
 
 
 @dataclass(slots=True)
@@ -28,8 +32,8 @@ class NetworkAwareApplication(Application):
         self.generated_packets = []
         self.completed_packets = []
 
-    def add_edge(self, u_of_edge: str, v_of_edge: str, packet_size_bytes: int = 1500,
-                 avg_packets_per_step: float = 1.0, **attr):
+    def add_edge(self, u_of_edge: str, v_of_edge: str, packet_size_bytes: int = DEFAULT_PACKET_SIZE_BYTES,
+                 avg_packets_per_step: float = DEFAULT_AVG_PACKETS_PER_STEP, **attr):
         """Overrides the default add_edge.
 
         It automatically validates and injects traffic parameters (packet size and expected rate)
@@ -62,8 +66,8 @@ class NetworkAwareApplication(Application):
         for u, v, data in self.edges(data=True):
 
             # Retrieve the saved parameters (Lambda parameter for Poisson)
-            lam_rate = data.get("avg_packets_per_step", 0.0)
-            size = data.get("packet_size_bytes", 1500)  # Default 1500 if absent
+            lam_rate = data.get("avg_packets_per_step", DEFAULT_AVG_PACKETS_PER_STEP)  # Default if absent
+            size = data.get("packet_size_bytes", DEFAULT_PACKET_SIZE_BYTES)  # Default if absent
 
             # Extraction of the number of packets to generate based on a Poisson distribution
             n_packets = np.random.poisson(lam=lam_rate) if lam_rate > 0 else 0
