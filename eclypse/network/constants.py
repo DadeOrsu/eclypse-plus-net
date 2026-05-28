@@ -27,10 +27,20 @@ SEC_TO_MS = 1000.0
 BYTES_TO_BITS = 8
 """Multiplier to convert packet size from Bytes to bits."""
 
+
+# Default values for the application
+DEFAULT_AVG_PACKETS_PER_STEP = 1.0
+"""Default average rate of packet generation per time step."""
+
+DEFAULT_PACKET_SIZE_BYTES = 1500
+"""Default packet size in Bytes"""
+
 __all__ = [
     "BYTES_TO_BITS",
+    "DEFAULT_AVG_PACKETS_PER_STEP",
     "DEFAULT_BANDWIDTH_MBPS",
     "DEFAULT_LENGTH_KM",
+    "DEFAULT_PACKET_SIZE_BYTES",
     "DEFAULT_PROPAGATION_SPEED_KM_S",
     "MBPS_TO_BPS",
     "MIN_LENGTH_KM",
