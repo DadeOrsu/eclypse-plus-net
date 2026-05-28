@@ -6,9 +6,14 @@ from eclypse.graph import Infrastructure
 from network_application import Packet
 from dataclasses import dataclass, field
 from constants import (
-    MIN_BANDWIDTH,
+    DEFAULT_BANDWIDTH_MBPS,
+    DEFAULT_LENGTH_KM,
+    DEFAULT_PROPAGATION_SPEED_KM_S,
     MIN_LENGTH_KM,
-    MIN_PROPAGATION_SPEED
+    MIN_PROPAGATION_SPEED,
+    MBPS_TO_BPS,
+    SEC_TO_MS,
+    BYTES_TO_BITS
 )
 
 @dataclass(slots=True)
@@ -58,8 +63,8 @@ class Network(Infrastructure):
         self.link_queues = defaultdict(deque)
 
 
-    def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = 100.0,
-                 length_km: float = 1.0, propagation_speed_km_s: float = 200000.0,
+    def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = DEFAULT_BANDWIDTH_MBPS,
+                 length_km: float = DEFAULT_LENGTH_KM, propagation_speed_km_s: float = DEFAULT_PROPAGATION_SPEED_KM_S,
                  **attr):
         """Add an edge to the network with queuing parameters.
 
@@ -79,7 +84,7 @@ class Network(Infrastructure):
         attr['bandwidth_mbps'] = bandwidth_mbps
         attr['length_km'] = length_km
         attr['propagation_speed_km_s'] = propagation_speed_km_s
-        attr['cost'] = 1/(bandwidth_mbps * 1_000_000)  # Cost for OSPF routing (inverse of bandwidth)
+        attr['cost'] = 1/(bandwidth_mbps * MBPS_TO_BPS)  # Cost for OSPF routing (inverse of bandwidth)
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
     def delay(self, u: str, v: str, edge_data: dict, packet: Packet, current_time: float) -> HopInfo | None:
@@ -102,7 +107,7 @@ class Network(Infrastructure):
         time_after_processing = current_time + d_proc
 
         queue = self.link_queues[(u, v)]
-        R = edge_data.get("bandwidth_mbps", MIN_BANDWIDTH) * 1_000_000
+        R = edge_data.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS) * MBPS_TO_BPS
         # We discard packets that have already completed transmission.
         # queue[0][0] accesses the `service_finish_time` of the first packet in the queue.
         while queue and queue[0][0] <= time_after_processing:
@@ -114,9 +119,9 @@ class Network(Infrastructure):
         d_queue = 0.0
         if R > 0:
             for _, queued_packet in queue:
-                L_i = queued_packet.size * 8
+                L_i = queued_packet.size * BYTES_TO_BITS
                 d_queue += (L_i / R)
-        L = packet.size * 8
+        L = packet.size * BYTES_TO_BITS
         # Transmission delay calculation for the current packet
         d_transm = (L / R) if R > 0 else 0.0
 
@@ -131,10 +136,10 @@ class Network(Infrastructure):
 
         return HopInfo(
             hop=f"{u}->{v}",
-            processing_ms=d_proc * 1000.0,
-            queue_ms=d_queue * 1000.0,
-            transmission_ms=d_transm * 1000.0,
-            propagation_ms=d_prop * 1000.0,
+            processing_ms=d_proc * SEC_TO_MS,
+            queue_ms=d_queue * SEC_TO_MS,
+            transmission_ms=d_transm * SEC_TO_MS,
+            propagation_ms=d_prop * SEC_TO_MS,
             queue_length=current_queue_length,
             arrival_at_next=service_finish_time + d_prop
         )
