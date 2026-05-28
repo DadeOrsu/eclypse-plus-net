@@ -6,6 +6,7 @@ from eclypse.workflow.event import EclypseEvent
 from eclypse.workflow.trigger import CascadeTrigger
 from network_application import NetworkAwareApplication
 from network import Network
+from constants import DEFAULT_BANDWIDTH_MBPS
 
 def build_probabilistic_queue(incoming_queues: dict[str, list], bandwidths: dict[str, float]) -> list:
     """It merges the input queues in a probabilistic manner based on bandwidth.
@@ -90,7 +91,7 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
             # Read the outgoing links from this node in the infrastructure.
             # Use the sum of the outgoing capacities as the weight for the extraction.
             out_edges = infra.out_edges(src_node, data=True)
-            total_bw = sum(d.get('bandwidth_mbps', 100.0) for _, _, d in out_edges)
+            total_bw = sum(d.get('bandwidth_mbps', DEFAULT_BANDWIDTH_MBPS) for _, _, d in out_edges)
 
             # Avoid division by zero if a node has no outgoing links
             bws[src_node] = total_bw if total_bw > 0 else 1.0
