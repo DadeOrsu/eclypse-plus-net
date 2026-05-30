@@ -6,7 +6,10 @@ from eclypse.workflow.event import EclypseEvent
 from eclypse.workflow.trigger import CascadeTrigger
 from network_application import NetworkAwareApplication
 from network import Network
-from constants import DEFAULT_BANDWIDTH_MBPS
+from constants import (
+    DEFAULT_BANDWIDTH_MBPS,
+    SEC_TO_MS
+)
 
 def build_probabilistic_queue(incoming_queues: dict[str, list], bandwidths: dict[str, float]) -> list:
     """It merges the input queues in a probabilistic manner based on bandwidth.
@@ -114,6 +117,40 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
         for packet in shuffled_packets:
             result = infra.packet_route(packet, current_time_s)
             app.completed_packets.append((packet, result))
+
+        # Calculate the average delay experienced by packets on each link during this step
+        link_delays = defaultdict(list)
+
+        # Collect the actual traversal times of all packets in this step
+        for _, result in app.completed_packets:
+            if result.status == "DELIVERED":
+                for hop_info in result.hops:
+                    # Extract the source and destination nodes from the "u->v" string
+                    u, v = hop_info.hop.split("->")
+
+                    # The total delay experienced by the packet on this link
+                    total_hop_delay = (hop_info.processing_ms +
+                                       hop_info.queue_ms +
+                                       hop_info.transmission_ms +
+                                       hop_info.propagation_ms)
+
+                    link_delays[(u, v)].append(total_hop_delay)
+
+        # Update the infrastructure with the calculated averages
+        for (u, v), delays in link_delays.items():
+            if infra.has_edge(u, v):
+                avg_latency = sum(delays) / len(delays)
+                # Override the 'latency' attribute.
+                # The PlacementManager will read this value in the next step
+                infra[u][v]['latency'] = avg_latency
+
+        # Restore base latency for inactive links in this step
+        for u, v, edge_data in infra.edges(data=True):
+            if (u, v) not in link_delays:
+                # If there was no traffic, the latency returns to the theoretical minimum (physics only)
+                d_proc_ms = infra.processing_time(u, v) * SEC_TO_MS
+                d_prop_ms = (edge_data.get('length_km', 0) / edge_data.get('propagation_speed_km_s', 1)) * SEC_TO_MS
+                infra[u][v]['latency'] = d_proc_ms + d_prop_ms
 
         # Empty the basket of generated packages for the next step
         app.generated_packets.clear()
