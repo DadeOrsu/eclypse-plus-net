@@ -55,9 +55,10 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
             triggers=[CascadeTrigger("step")]
         )
 
-    def _resolve_placements_and_group(self, packets: list, placement) -> dict[str, list]:
-        """Resolve logic nodes to physical nodes and group packets by source."""
-        incoming_queues = defaultdict(list)
+    def _group_by_contention_point(self, packets: list, placement, infra: Network) -> dict:
+        """Group packets by their next-hop contention point (receiving router)."""
+        contention_groups = defaultdict(lambda: defaultdict(list))
+
         for packet in packets:
             try:
                 src_node = placement.service_placement(service_id=packet.src)
@@ -68,18 +69,37 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
 
             packet.src = src_node
             packet.dst = dst_node
-            incoming_queues[src_node].append(packet)
 
-        return incoming_queues
+            if src_node == dst_node:
+                continue
 
-    def _calculate_bandwidth_weights(self, incoming_queues: dict[str, list], infra: Network) -> dict[str, float]:
-        """Calculate the bandwidth weights for probabilistic multiplexing."""
-        bws = {}
-        for src_node in incoming_queues:
-            out_edges = infra.out_edges(src_node, data=True)
-            total_bw = sum(d.get('bandwidth_mbps', DEFAULT_BANDWIDTH_MBPS) for _, _, d in out_edges)
-            bws[src_node] = total_bw if total_bw > 0 else 1.0
-        return bws
+            path = infra.path(src_node, dst_node, cost_attr='cost')
+            if path and len(path) > 0:
+                first_edge = path[0]
+                next_hop = first_edge[1]
+
+                contention_groups[next_hop][src_node].append(packet)
+
+        return contention_groups
+
+    def _resolve_local_multiplexing(self, contention_groups: dict, infra: Network) -> list:
+        """Apply independent probabilistic multiplexing to resolve local contention."""
+        final_shuffled_list = []
+
+        # Iterate over each contention point (next-hop) and its incoming queues
+        for next_hop, incoming_queues in contention_groups.items():
+            bws = {}
+            # For each source node, we read the bandwidth.
+            for src_node in incoming_queues:
+                # Read the bandwidth of the link from src_node to next_hop
+                edge_data = infra.get_edge_data(src_node, next_hop, default={})
+                bws[src_node] = edge_data.get('bandwidth_mbps', DEFAULT_BANDWIDTH_MBPS)
+
+            # Apply the probabilistic multiplexer to shuffle the packets based on bandwidth
+            shuffled_group = build_probabilistic_queue(incoming_queues, bws)
+            final_shuffled_list.extend(shuffled_group)
+
+        return final_shuffled_list
 
     def _update_dynamic_latencies(self, completed_packets: list, infra: Network) -> None:
         """Update link latencies based on actual traffic, restoring defaults for idle links."""
@@ -109,25 +129,15 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
                 infra[u][v]['latency'] = d_proc_ms + d_prop_ms
 
     def __call__(self, app: NetworkAwareApplication, placement, infra: Network, **kwargs):
-        """Execute the routing logic for packets generated in the current step.
-
-        Args:
-            app (NetworkAwareApplication): The application instance containing the
-                generated and completed packets.
-            placement: The placement service used to resolve node locations.
-            infra (Network): The network infrastructure used for packet routing.
-            **kwargs: Additional keyword arguments provided by the framework.
-        """
-        # Clear the output basket from the previous step's results
+        """Execute the routing logic for packets generated in the current step."""
         app.completed_packets.clear()
         current_time_s = app.current_step * self.step_duration_s
 
-        # Setup of the incoming queues grouped by source node and calculation of bandwidth weights
-        incoming_queues = self._resolve_placements_and_group(app.generated_packets, placement)
-        bws = self._calculate_bandwidth_weights(incoming_queues, infra)
+        # Group packets by their next-hop contention point
+        contention_groups = self._group_by_contention_point(app.generated_packets, placement, infra)
 
-        # Probabilistic multiplexing of the incoming queues based on bandwidth weights
-        shuffled_packets = build_probabilistic_queue(incoming_queues, bws)
+        # Independent probabilistic multiplexing for each contention point
+        shuffled_packets = self._resolve_local_multiplexing(contention_groups, infra)
 
         if shuffled_packets:
             source_order = [p.src for p in shuffled_packets]
@@ -137,12 +147,12 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
                 f"Extraction order: {source_order}"
             )
 
-        # Routing of the packets in the shuffled order
+        # Physical routing E2E
         for packet in shuffled_packets:
             result = infra.packet_route(packet, current_time_s)
             app.completed_packets.append((packet, result))
 
-        # Update of the dynamic latencies based on the actual traffic
+        # Update latencies
         self._update_dynamic_latencies(app.completed_packets, infra)
 
         app.generated_packets.clear()
