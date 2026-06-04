@@ -15,11 +15,14 @@ from __future__ import annotations
 
 from typing import (
     TYPE_CHECKING,
+    TypeVar,
 )
 
 import networkx as nx
 
 from eclypse.graph import Infrastructure
+
+TInfrastructure = TypeVar("TInfrastructure", bound=Infrastructure)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -44,7 +47,8 @@ def get_random(
     resource_init: InitPolicy = "min",
     path_algorithm: Callable[[nx.Graph, str, str], list[str]] | None = None,
     seed: int | None = None,
-):
+    infrastructure_cls: type[TInfrastructure] = Infrastructure,
+) -> TInfrastructure:
     """Create a random infrastructure with `n` nodes and a connection probability `p`.
 
     The nodes are partitioned into groups according to the
@@ -75,7 +79,7 @@ def get_random(
     Returns:
         Infrastructure: The random infrastructure.
     """
-    infrastructure = Infrastructure(
+    infrastructure = infrastructure_cls(
         infrastructure_id=infrastructure_id,
         update_policies=update_policies,
         node_assets=node_assets,
