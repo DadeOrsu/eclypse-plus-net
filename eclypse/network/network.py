@@ -62,6 +62,8 @@ class Network(Infrastructure):
         super().__init__(*args, **kwargs)
         self.link_queues = defaultdict(deque)
 
+        self.link_step_time = defaultdict(float)
+        self.router_buffers = defaultdict(list)
 
     def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = DEFAULT_BANDWIDTH_MBPS,
                  length_km: float = DEFAULT_LENGTH_KM, propagation_speed_km_s: float = DEFAULT_PROPAGATION_SPEED_KM_S,
@@ -87,91 +89,66 @@ class Network(Infrastructure):
         attr['cost'] = 1/(bandwidth_mbps * MBPS_TO_BPS)  # Cost for OSPF routing (inverse of bandwidth)
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
-    def delay(self, u: str, v: str, edge_data: dict, packet: Packet, current_time: float) -> HopInfo | None:
-        """Calculate the delay components for a packet traversing a specific link.
+    def forward_one_hop(self, packet: Packet, current_time: float) -> str | None:
+        """Calculate the delay on a single hop by dynamically requesting the next_hop."""
+        u = packet.current_node
 
-        Args:
-            u (str): The source node ID of the link.
-            v (str): The destination node ID of the link.
-            edge_data (dict): The attributes of the edge containing bandwidth, length,
-                speed, and processing delay specifications.
-            packet (Packet): The packet being transmitted.
-            current_time (float): The simulation time at which the packet arrives at node 'u'.
+        # Dynamic path calculation at each hop to allow for OSPF to react to topology changes
+        path = self.path(u, packet.dst, cost_attr='cost')
+        if not path:
+            self.logger.warning(f"Packet {packet.id} dropped: No path to {packet.dst}")
+            return None
 
-        Returns:
-            HopInfo | None: A dataclass containing the calculated processing, queuing,
-                transmission, and propagation delays, as well as the queue length. Returns
-                None if the delay calculation cannot be performed.
-        """
+        v = path[0][1] # Takes only the next hop from the path
+
+        edge_data = self.get_edge_data(u, v, default={})
+
+        # Reset of the queue
+        if current_time > self.link_step_time[(u, v)]:
+            self.link_queues[(u, v)].clear()
+            self.link_step_time[(u, v)] = current_time
+
         d_proc = self.processing_time(u, v)
-        time_after_processing = current_time + d_proc
-
-        queue = self.link_queues[(u, v)]
         R = edge_data.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS) * MBPS_TO_BPS
-        # We discard packets that have already completed transmission.
-        # queue[0][0] accesses the `service_finish_time` of the first packet in the queue.
-        while queue and queue[0][0] <= time_after_processing:
-            queue.popleft()
 
-        current_queue_length = len(queue)
-        # Queuing delay calculation as the sum of remaining transmission times of packets still
-        # in the queue
+        # queuing delay is calculated based on the current queue length
+        queue = self.link_queues[(u, v)]
         d_queue = 0.0
         if R > 0:
-            for _, queued_packet in queue:
-                L_i = queued_packet.size * BYTES_TO_BITS
-                d_queue += (L_i / R)
-        L = packet.size * BYTES_TO_BITS
-        # Transmission delay calculation for the current packet
-        d_transm = (L / R) if R > 0 else 0.0
+            for queued_packet in queue:
+                d_queue += ((queued_packet.size * BYTES_TO_BITS) / R)
 
-        service_finish_time = time_after_processing + d_queue + d_transm
+        d_transm = ((packet.size * BYTES_TO_BITS) / R) if R > 0 else 0.0
+        d_prop = (edge_data.get("length_km", MIN_LENGTH_KM) /
+                  edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)) if edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED) > 0 else 0.0
 
-        queue.append((service_finish_time, packet))
+        queue.append(packet)
 
-        # Propagation delay calculation
-        d = edge_data.get("length_km", MIN_LENGTH_KM)
-        s = edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
-        d_prop = d / s if s > 0 else 0.0
+        # Update the accumulators (for the graphic breakdown and the final E2E delay)
+        packet.total_processing_ms += (d_proc * SEC_TO_MS)
+        packet.total_queue_ms += (d_queue * SEC_TO_MS)
+        packet.total_transmission_ms += (d_transm * SEC_TO_MS)
+        packet.total_propagation_ms += (d_prop * SEC_TO_MS)
 
-        return HopInfo(
-            hop=f"{u}->{v}",
-            processing_ms=d_proc * SEC_TO_MS,
-            queue_ms=d_queue * SEC_TO_MS,
-            transmission_ms=d_transm * SEC_TO_MS,
-            propagation_ms=d_prop * SEC_TO_MS,
-            queue_length=current_queue_length,
-            arrival_at_next=service_finish_time + d_prop
-        )
+        hop_delay_ms = (d_proc + d_queue + d_transm + d_prop) * SEC_TO_MS
+        arrival_time_ms = (current_time * SEC_TO_MS) + hop_delay_ms
 
-    def packet_route(self, packet: Packet, start_time: float) -> RoutingResult:
-        """Simulate the physical routing of a single packet using ECLYPSE native paths."""
-        # Requests the path from ECLYPSE using the OSPF 'cost' metric
-        full_path = self.path(packet.src, packet.dst, cost_attr='cost')
+        packet.hop_history.append({
+            "hop": f"{u}->{v}",
+            "processing_ms": d_proc * SEC_TO_MS,
+            "queue_ms": d_queue * SEC_TO_MS,
+            "transmission_ms": d_transm * SEC_TO_MS,
+            "propagation_ms": d_prop * SEC_TO_MS,
+            "queue_length": len(queue),
+            "arrival_at_next": arrival_time_ms
+        })
 
-        # If there is no path, we return a failure result immediately
-        if full_path is None:
-            return RoutingResult(status="FAILED", reason=f"No route from {packet.src} to {packet.dst}")
+        packet.total_delay_ms += hop_delay_ms
+        packet.previous_node = u
+        packet.current_node = v
 
-        current_t = start_time
-        hop_details = []
-        path_taken = [packet.src]
-
-        # Iterate over the path and calculate delays for each hop using the delay function
-        for u, v, edge_data in full_path:
-            hop_stats = self.delay(u, v, edge_data, packet, current_t)
-            hop_details.append(hop_stats)
-            current_t = hop_stats.arrival_at_next
-            path_taken.append(v)
-
-        # Return the result of the routing simulation with all the collected metrics and information
-        return RoutingResult(
-            status="DELIVERED",
-            path=path_taken,
-            end_time=current_t,
-            total_e2e_delay=current_t - start_time,
-            hops=hop_details
-        )
+        # return the next hop
+        return v
 
     def remove_node(self, n: str):
         """Remove a node from the network and trigger an OSPF cache update.
