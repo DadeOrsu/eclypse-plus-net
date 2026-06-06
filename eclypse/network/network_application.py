@@ -1,6 +1,6 @@
 import numpy as np
 from eclypse.graph import Application
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from constants import(
     DEFAULT_AVG_PACKETS_PER_STEP,
     DEFAULT_PACKET_SIZE_BYTES
@@ -9,12 +9,25 @@ from constants import(
 
 @dataclass(slots=True)
 class Packet:
-    """Data class to represent a network packet with its attributes."""
+    """Data class to represent a stateful network packet for Hop-by-Hop routing."""
     id: int
     src: str
     dst: str
     size: int
     step_created: int
+
+    current_node: str = ""
+    previous_node: str = "APP"
+
+    # additional fields used for stackplot breakdown and final E2E delay calculation
+
+    total_delay_ms: float = 0.0
+    total_processing_ms: float = 0.0
+    total_queue_ms: float = 0.0
+    total_transmission_ms: float = 0.0
+    total_propagation_ms: float = 0.0
+
+    hop_history: list[dict] = field(default_factory=list)
 
 
 class NetworkAwareApplication(Application):
