@@ -40,23 +40,37 @@ class TrafficRoutingMetric:
         if app.completed_packets:
             current_time_s = app.current_step * self.step_duration_s
 
-            for packet, result in app.completed_packets:
-                if result.status == 'DELIVERED':
-                    prefix = f"pkt_{packet.id}"
-                    step_results[f"{prefix}_App"] = app.id
-                    step_results[f"{prefix}_Src"] = packet.src
-                    step_results[f"{prefix}_Dst"] = packet.dst
-                    step_results[f"{prefix}_Start_Time"] = current_time_s
-                    step_results[f"{prefix}_End_Time"] = result.end_time
-                    step_results[f"{prefix}_Total_Delay_ms"] = result.total_e2e_delay * 1000
-                    for i, h in enumerate(result.hops):
-                        hop_prefix = f"{prefix}_Hop_{i+1}"
-                        step_results[f"{hop_prefix}_hop"] = h.hop
-                        step_results[f"{hop_prefix}_processing_ms"] = h.processing_ms
-                        step_results[f"{hop_prefix}_queue_ms"] = h.queue_ms
-                        step_results[f"{hop_prefix}_transmission_ms"] = h.transmission_ms
-                        step_results[f"{hop_prefix}_propagation_ms"] = h.propagation_ms
-                        step_results[f"{hop_prefix}_queue_length"] = h.queue_length
-                        step_results[f"{hop_prefix}_arrival_at_next"] = h.arrival_at_next
+            # Iterate over completed packets and extract relevant metrics
+            for packet in app.completed_packets:
+                prefix = f"pkt_{packet.id}"
+                step_results[f"{prefix}_App"] = app.id
+                step_results[f"{prefix}_Src"] = packet.src
+                step_results[f"{prefix}_Dst"] = packet.dst
+
+                start_time_s = packet.step_created * self.step_duration_s
+
+                step_results[f"{prefix}_Start_Time"] = start_time_s
+                step_results[f"{prefix}_End_Time"] = current_time_s
+
+                step_results[f"{prefix}_Total_Delay_ms"] = packet.total_delay_ms
+
+                # Components used for the stackplot breakdown
+                step_results[f"{prefix}_processing_ms"] = packet.total_processing_ms
+                step_results[f"{prefix}_queue_ms"] = packet.total_queue_ms
+                step_results[f"{prefix}_transmission_ms"] = packet.total_transmission_ms
+                step_results[f"{prefix}_propagation_ms"] = packet.total_propagation_ms
+
+                # Also export the hop-by-hop details
+                for i, hop_data in enumerate(packet.hop_history):
+                    hop_prefix = f"{prefix}_Hop_{i+1}"
+                    step_results[f"{hop_prefix}_hop"] = hop_data["hop"]
+                    step_results[f"{hop_prefix}_processing_ms"] = hop_data["processing_ms"]
+                    step_results[f"{hop_prefix}_queue_ms"] = hop_data["queue_ms"]
+                    step_results[f"{hop_prefix}_transmission_ms"] = hop_data["transmission_ms"]
+                    step_results[f"{hop_prefix}_propagation_ms"] = hop_data["propagation_ms"]
+                    step_results[f"{hop_prefix}_queue_length"] = hop_data["queue_length"]
+
+                    # Also export the arrival timestamp at the next node
+                    step_results[f"{hop_prefix}_arrival_at_next"] = hop_data["arrival_at_next"]
 
         return step_results if step_results else None
