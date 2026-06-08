@@ -63,14 +63,12 @@ class TrafficRoutingMetric:
                 # Also export the hop-by-hop details
                 for i, hop_data in enumerate(packet.hop_history):
                     hop_prefix = f"{prefix}_Hop_{i+1}"
-                    step_results[f"{hop_prefix}_hop"] = hop_data["hop"]
-                    step_results[f"{hop_prefix}_processing_ms"] = hop_data["processing_ms"]
-                    step_results[f"{hop_prefix}_queue_ms"] = hop_data["queue_ms"]
-                    step_results[f"{hop_prefix}_transmission_ms"] = hop_data["transmission_ms"]
-                    step_results[f"{hop_prefix}_propagation_ms"] = hop_data["propagation_ms"]
-                    step_results[f"{hop_prefix}_queue_length"] = hop_data["queue_length"]
-
-                    # Also export the arrival timestamp at the next node
-                    step_results[f"{hop_prefix}_arrival_at_next"] = hop_data["arrival_at_next"]
+                    step_results[f"{hop_prefix}_hop"] = hop_data.hop
+                    step_results[f"{hop_prefix}_processing_ms"] = hop_data.processing_ms
+                    step_results[f"{hop_prefix}_queue_ms"] = hop_data.queue_ms
+                    step_results[f"{hop_prefix}_transmission_ms"] = hop_data.transmission_ms
+                    step_results[f"{hop_prefix}_propagation_ms"] = hop_data.propagation_ms
+                    step_results[f"{hop_prefix}_queue_length"] = hop_data.queue_length
+                    step_results[f"{hop_prefix}_arrival_at_next"] = hop_data.arrival_at_next
 
         return step_results if step_results else None
