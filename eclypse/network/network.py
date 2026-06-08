@@ -3,7 +3,6 @@
 import networkx as nx
 from collections import defaultdict, deque
 from eclypse.graph import Infrastructure
-from network_application import Packet
 from dataclasses import dataclass, field
 from constants import (
     DEFAULT_BANDWIDTH_MBPS,
@@ -29,14 +28,26 @@ class HopInfo:
 
 
 @dataclass(slots=True)
-class RoutingResult:
-    """Represent the result of routing a packet through the network."""
-    status: str
-    reason: str = ""
-    path: list[str] = field(default_factory=list)
-    end_time: float = 0.0
-    total_e2e_delay: float = 0.0
-    hops: list[HopInfo] = field(default_factory=list)
+class Packet:
+    """Data class to represent a stateful network packet for Hop-by-Hop routing."""
+    id: int
+    src: str
+    dst: str
+    size: int
+    step_created: int
+
+    current_node: str = ""
+    previous_node: str = "APP"
+
+    # additional fields used for stackplot breakdown and final E2E delay calculation
+
+    total_delay_ms: float = 0.0
+    total_processing_ms: float = 0.0
+    total_queue_ms: float = 0.0
+    total_transmission_ms: float = 0.0
+    total_propagation_ms: float = 0.0
+
+    hop_history: list[HopInfo] = field(default_factory=list)
 
 def ospf_path_algorithm(g: nx.Graph, source: str, target: str) -> list[str]:
     """Custom path algorithm for ECLYPSE to strictly use OSPF 'cost'."""
@@ -133,15 +144,15 @@ class Network(Infrastructure):
         hop_delay_ms = (d_proc + d_queue + d_transm + d_prop) * SEC_TO_MS
         arrival_time_ms = (current_time * SEC_TO_MS) + hop_delay_ms
 
-        packet.hop_history.append({
-            "hop": f"{u}->{v}",
-            "processing_ms": d_proc * SEC_TO_MS,
-            "queue_ms": d_queue * SEC_TO_MS,
-            "transmission_ms": d_transm * SEC_TO_MS,
-            "propagation_ms": d_prop * SEC_TO_MS,
-            "queue_length": len(queue),
-            "arrival_at_next": arrival_time_ms
-        })
+        packet.hop_history.append(HopInfo(
+            hop=f"{u}->{v}",
+            processing_ms=d_proc * SEC_TO_MS,
+            queue_ms=d_queue * SEC_TO_MS,
+            transmission_ms=d_transm * SEC_TO_MS,
+            propagation_ms=d_prop * SEC_TO_MS,
+            queue_length=len(queue),
+            arrival_at_next=arrival_time_ms
+        ))
 
         packet.total_delay_ms += hop_delay_ms
         packet.previous_node = u
