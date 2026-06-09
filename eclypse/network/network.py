@@ -35,9 +35,9 @@ class Packet:
     dst: str
     size: int
     step_created: int
-
     current_node: str = ""
     previous_node: str = "APP"
+    hop_count: int = 0
 
     # additional fields used for stackplot breakdown and final E2E delay calculation
 
@@ -76,6 +76,8 @@ class Network(Infrastructure):
         self.link_step_time = defaultdict(float)
         self.router_buffers = defaultdict(list)
 
+        self.step_telemetry = []
+
     def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = DEFAULT_BANDWIDTH_MBPS,
                  length_km: float = DEFAULT_LENGTH_KM, propagation_speed_km_s: float = DEFAULT_PROPAGATION_SPEED_KM_S,
                  **attr):
@@ -101,20 +103,19 @@ class Network(Infrastructure):
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
     def forward_one_hop(self, packet: Packet, current_time: float) -> str | None:
-        """Calculate the delay on a single hop by dynamically requesting the next_hop."""
+        """Calcola il ritardo sul singolo hop e registra la telemetria nello step_telemetry."""
         u = packet.current_node
 
-        # Dynamic path calculation at each hop to allow for OSPF to react to topology changes
+        # 1. Calcolo dinamico del next hop
         path = self.path(u, packet.dst, cost_attr='cost')
         if not path:
-            self.logger.warning(f"Packet {packet.id} dropped: No path to {packet.dst}")
+            self.logger.warning(f"Packet {packet.id} droppato: Nessuna rotta per {packet.dst}")
             return None
 
-        v = path[0][1] # Takes only the next hop from the path
-
+        v = path[0][1]
         edge_data = self.get_edge_data(u, v, default={})
 
-        # Reset of the queue
+        # 2. Reset coda M/D/1
         if current_time > self.link_step_time[(u, v)]:
             self.link_queues[(u, v)].clear()
             self.link_step_time[(u, v)] = current_time
@@ -122,7 +123,7 @@ class Network(Infrastructure):
         d_proc = self.processing_time(u, v)
         R = edge_data.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS) * MBPS_TO_BPS
 
-        # queuing delay is calculated based on the current queue length
+        # 3. Calcolo ritardo di accodamento
         queue = self.link_queues[(u, v)]
         d_queue = 0.0
         if R > 0:
@@ -135,16 +136,12 @@ class Network(Infrastructure):
 
         queue.append(packet)
 
-        # Update the accumulators (for the graphic breakdown and the final E2E delay)
-        packet.total_processing_ms += (d_proc * SEC_TO_MS)
-        packet.total_queue_ms += (d_queue * SEC_TO_MS)
-        packet.total_transmission_ms += (d_transm * SEC_TO_MS)
-        packet.total_propagation_ms += (d_prop * SEC_TO_MS)
-
+        # 4. Calcolo tempi per la telemetria
         hop_delay_ms = (d_proc + d_queue + d_transm + d_prop) * SEC_TO_MS
         arrival_time_ms = (current_time * SEC_TO_MS) + hop_delay_ms
 
-        packet.hop_history.append(HopInfo(
+        # 5. Registrazione nel registro temporaneo della rete (NON nel pacchetto)
+        hop_info = HopInfo(
             hop=f"{u}->{v}",
             processing_ms=d_proc * SEC_TO_MS,
             queue_ms=d_queue * SEC_TO_MS,
@@ -152,13 +149,14 @@ class Network(Infrastructure):
             propagation_ms=d_prop * SEC_TO_MS,
             queue_length=len(queue),
             arrival_at_next=arrival_time_ms
-        ))
+        )
+        self.step_telemetry.append((packet, hop_info))
 
-        packet.total_delay_ms += hop_delay_ms
+        # 6. Avanzamento stato minimale
         packet.previous_node = u
         packet.current_node = v
 
-        # return the next hop
+        packet.hop_count += 1
         return v
 
     def remove_node(self, n: str):
