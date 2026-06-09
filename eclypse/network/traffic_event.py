@@ -7,8 +7,7 @@ from eclypse.workflow.trigger import CascadeTrigger
 from network_application import NetworkAwareApplication
 from network import Network
 from constants import (
-    DEFAULT_BANDWIDTH_MBPS,
-    SEC_TO_MS
+    DEFAULT_BANDWIDTH_MBPS
 )
 
 def build_probabilistic_queue(incoming_queues: dict[str, list], bandwidths: dict[str, float]) -> list:
@@ -110,9 +109,11 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
                 order_log = ", ".join([f"{p.id} ({p.previous_node})" for p in shuffled_packets])
                 infra.logger.info(f"{router} order: [{order_log}]")
 
-            # Forward each packet one hop at a time, updating its state and moving it to the next buffer or completed list
+            # Forward each packet one hop at a time, updating its state and moving it to the next
+            # buffer or completed list
             for pkt in shuffled_packets:
-                # Ask the infrastructure to forward the packet one hop towards its destination, and get the next node
+                # Ask the infrastructure to forward the packet one hop towards its destination,
+                # and get the next node
                 next_node = infra.forward_one_hop(pkt, current_time_s)
 
                 if next_node is not None:
@@ -128,3 +129,5 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
         # Move the landed packets to the new routers for the next round
         for router, pkts in next_step_buffers.items():
             infra.router_buffers[router].extend(pkts)
+        # Update the link latencies based on the telemetry collected during this step's forwarding
+        infra.update_link_latencies()
