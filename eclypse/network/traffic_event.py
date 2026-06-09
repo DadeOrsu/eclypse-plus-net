@@ -19,7 +19,7 @@ def build_probabilistic_queue(incoming_queues: dict[str, list], bandwidths: dict
     """
     merged_queue = []
 
-    # We continue until there is at least one packet in any of the queues.
+    # Continue until there is at least one packet in any of the queues.
     while any(incoming_queues.values()):
         # Filter out sources that still have packages
         active_sources = [src for src, q in incoming_queues.items() if len(q) > 0]
@@ -58,6 +58,8 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
 
     def __call__(self, app: NetworkAwareApplication, placement, infra: Network, **kwargs):
         """Execute the routing logic for packets generated in the current step."""
+        # Clear the step telemetry to prepare for new data collection during this step's execution
+        infra.step_telemetry.clear()
         current_time_s = app.current_step * self.step_duration_s
 
         # Temporary buffer to hold packets for the next step after forwarding
