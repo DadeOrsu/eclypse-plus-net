@@ -96,7 +96,7 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
 
             if next_node is not None:
                 if next_node == pkt.dst:
-                    app.completed_packets.append(pkt)
+                    pass # The packet has reached its destination
                 else:
                     next_step_buffers[next_node].append(pkt)
 

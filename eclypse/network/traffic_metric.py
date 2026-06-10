@@ -50,8 +50,4 @@ class TrafficRoutingMetric:
                 step_results[f"{prefix}_queue_length"] = float(hop_data.queue_length)
                 step_results[f"{prefix}_arrival_at_next"] = float(hop_data.arrival_at_next)
 
-        # Clean the completed packets list for the next step to avoid stale data
-        if app.completed_packets:
-            app.completed_packets.clear()
-
         return step_results if step_results else None
