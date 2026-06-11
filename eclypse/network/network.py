@@ -150,17 +150,34 @@ class Network(Infrastructure):
         v = path[0][1]
         edge_data = self.get_edge_data(u, v, default={})
 
-        # Clear the link queue if the current time has advanced beyond the last recorded step time
-        #  for this link
-        if current_time > self.link_step_time[(u, v)]:
-            self.link_queues[(u, v)].clear()
-            self.link_step_time[(u, v)] = current_time
-
-        d_proc = self.processing_time(u, v)
         R = edge_data.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS) * MBPS_TO_BPS
 
         # Calculate the queuing delay based on the current queue length and the link bandwidth
         queue = self.link_queues[(u, v)]
+
+        # If there is a recorded time for the last packet processed on this link, we can calculate
+        # how many bits have been transmitted since then and update the queue accordingly
+        if (u, v) in self.link_step_time and current_time > self.link_step_time[(u, v)]:
+            delta_t = current_time - self.link_step_time[(u, v)]
+            bits_service_capacity = delta_t * R
+
+            # Svuota dalla coda solo i pacchetti che il link ha fatto in tempo a trasmettere
+            while queue and bits_service_capacity > 0:
+                front_packet_bits = queue[0].size * BYTES_TO_BITS
+                if bits_service_capacity >= front_packet_bits:
+                    bits_service_capacity -= front_packet_bits
+                    queue.popleft()  # The packet has been fully transmitted, remove it from the queue
+                else:
+                    # The packet at the front has been transmitted only partially.
+                    break
+
+        # Update the last time we processed this link to the current time
+        # So we can calculate the next delta_t
+        self.link_step_time[(u, v)] = current_time
+
+        d_proc = self.processing_time(u, v)
+
+        # Calculate the queuing delay based ONLY on the packets actually left in the queue
         d_queue = 0.0
         if R > 0:
             for queued_packet in queue:
@@ -170,6 +187,8 @@ class Network(Infrastructure):
         d_prop = (edge_data.get("length_km", MIN_LENGTH_KM) /
                   edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)) if edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED) > 0 else 0.0
 
+        # Queue the current packet (which will affect subsequent ones at the same time or
+        # in the future)
         queue.append(packet)
 
         # Calculate the times for the telemetry
