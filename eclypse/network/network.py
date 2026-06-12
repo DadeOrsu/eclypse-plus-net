@@ -155,18 +155,17 @@ class Network(Infrastructure):
         # Calculate the queuing delay based on the current queue length and the link bandwidth
         queue = self.link_queues[(u, v)]
 
-        # If there is a recorded time for the last packet processed on this link, we can calculate
-        # how many bits have been transmitted since then and update the queue accordingly
+        # If there is a recorded time for the last packet processed on this link
         if (u, v) in self.link_step_time and current_time > self.link_step_time[(u, v)]:
             delta_t = current_time - self.link_step_time[(u, v)]
             bits_service_capacity = delta_t * R
 
-            # Svuota dalla coda solo i pacchetti che il link ha fatto in tempo a trasmettere
+            # Only clear the queue of packets that the link had time to transmit.
             while queue and bits_service_capacity > 0:
                 front_packet_bits = queue[0].size * BYTES_TO_BITS
                 if bits_service_capacity >= front_packet_bits:
                     bits_service_capacity -= front_packet_bits
-                    queue.popleft()  # The packet has been fully transmitted, remove it from the queue
+                    queue.popleft()  # The packet has been fully transmitted, remove it
                 else:
                     # The packet at the front has been transmitted only partially.
                     break
