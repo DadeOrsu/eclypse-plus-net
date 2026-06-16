@@ -10,27 +10,6 @@ from constants import (
     DEFAULT_BANDWIDTH_MBPS
 )
 
-def build_probabilistic_queue(incoming_queues: dict[str, list], bandwidths: dict[str, float]) -> list:
-    """It merges the input queues in a probabilistic manner based on bandwidth.
-
-    Implement a probabilistic multiplexer: it extracts packets from the input
-    queues by tossing a 'weighted coin' based on the bandwidth values.
-    """
-    merged_queue = []
-
-    # Continue until there is at least one packet in any of the queues.
-    while any(incoming_queues.values()):
-        # Filter out sources that still have packages
-        active_sources = [src for src, q in incoming_queues.items() if len(q) > 0]
-        # Retrieve the associated weights (bandwidth)
-        active_weights = [bandwidths[src] for src in active_sources]
-        # Probabilistic extraction of the packet with P = Bandwidth / Sum(Bandwidths)
-        chosen_source = random.choices(active_sources, weights=active_weights, k=1)[0]
-        # Remove the packet from the original queue and insert it into the merged queue
-        packet = incoming_queues[chosen_source].pop(0)
-        merged_queue.append(packet)
-
-    return merged_queue
 
 class TrafficRoutingExecutionEvent(EclypseEvent):
     """Worker event that executes routing logic and updates application state.
@@ -54,7 +33,8 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
             triggers=[CascadeTrigger("step")]
         )
 
-    def _inject_generated_packets(self, app: NetworkAwareApplication, placement, infra: Network) -> None:
+    def _inject_generated_packets(self, app: NetworkAwareApplication,
+                                  placement, infra: Network) -> None:
         """Helper to inject new packets into the network."""
         for packet in app.generated_packets:
             try:
@@ -71,7 +51,8 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
 
         app.generated_packets.clear()
 
-    def _prepare_incoming_queues(self, router: str, buffer: list, infra: Network) -> tuple[dict, dict]:
+    def _prepare_incoming_queues(self, router: str, buffer: list,
+                                 infra: Network) -> tuple[dict, dict]:
         """Helper to separate incoming packets by source and determine link bandwidths."""
         incoming_queues = defaultdict(list)
         for pkt in buffer:
@@ -87,9 +68,34 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
 
         return incoming_queues, bws
 
+    def _build_probabilistic_queue(self, incoming_queues: dict[str, list],
+                                   bandwidths: dict[str, float]) -> list:
+        """It merges the input queues in a probabilistic manner based on bandwidth.
+
+        Implement a probabilistic multiplexer: it extracts packets from the input
+        queues by tossing a 'weighted coin' based on the bandwidth values.
+        """
+        merged_queue = []
+
+        # Continue until there is at least one packet in any of the queues.
+        while any(incoming_queues.values()):
+            # Filter out sources that still have packages
+            active_sources = [src for src, q in incoming_queues.items() if len(q) > 0]
+            # Retrieve the associated weights (bandwidth)
+            active_weights = [bandwidths[src] for src in active_sources]
+            # Probabilistic extraction of the packet with P = Bandwidth/Sum(Bandwidths)
+            chosen_source = random.choices(active_sources,
+                                        weights=active_weights,
+                                        k=1)[0]
+            # Remove packet from the chosen queue and insert it into the merged queue
+            packet = incoming_queues[chosen_source].pop(0)
+            merged_queue.append(packet)
+
+        return merged_queue
+
+
     def _forward_shuffled_packets(self, shuffled_packets: list, current_time_s: float,
-                                  app: NetworkAwareApplication, infra: Network,
-                                  next_step_buffers: dict) -> None:
+                                  infra: Network, next_step_buffers: dict) -> None:
         """Helper to route packets sequentially and distribute them to their next destination."""
         for pkt in shuffled_packets:
             next_node = infra.forward_one_hop(pkt, current_time_s)
@@ -119,7 +125,7 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
                 continue
 
             incoming_queues, bws = self._prepare_incoming_queues(router, buffer, infra)
-            shuffled_packets = build_probabilistic_queue(incoming_queues, bws)
+            shuffled_packets = self._build_probabilistic_queue(incoming_queues, bws)
 
             if len(shuffled_packets) > 1:
                 order_log = ", ".join([f"{p.id} ({p.previous_node})" for p in shuffled_packets])
