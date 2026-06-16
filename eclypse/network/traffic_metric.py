@@ -21,7 +21,8 @@ class TrafficRoutingMetric:
         """
         self.step_duration_s = step_duration_s
 
-    def __call__(self, app: NetworkAwareApplication, placement, infra: Network, **kwargs):
+    def __call__(self, app: NetworkAwareApplication, _placement, infra: Network,
+                 **_kwargs):
         """Extract and format metrics from the application's completed packets.
 
         Args:
@@ -43,11 +44,23 @@ class TrafficRoutingMetric:
                 prefix = f"step_{app.current_step}_pkt_{packet.id}_hop_{packet.hop_count}"
 
                 step_results[f"{prefix}_hop"] = hop_data.hop
-                step_results[f"{prefix}_processing_ms"] = float(hop_data.processing_ms)
-                step_results[f"{prefix}_queue_ms"] = float(hop_data.queue_ms)
-                step_results[f"{prefix}_transmission_ms"] = float(hop_data.transmission_ms)
-                step_results[f"{prefix}_propagation_ms"] = float(hop_data.propagation_ms)
-                step_results[f"{prefix}_queue_length"] = float(hop_data.queue_length)
-                step_results[f"{prefix}_arrival_at_next"] = float(hop_data.arrival_at_next)
+                step_results[f"{prefix}_processing_ms"] = float(
+                    hop_data.processing_ms
+                )
+                step_results[f"{prefix}_queue_ms"] = float(
+                    hop_data.queue_ms
+                )
+                step_results[f"{prefix}_transmission_ms"] = float(
+                    hop_data.transmission_ms
+                )
+                step_results[f"{prefix}_propagation_ms"] = float(
+                    hop_data.propagation_ms
+                )
+                step_results[f"{prefix}_queue_length"] = float(
+                    hop_data.queue_length
+                )
+                step_results[f"{prefix}_arrival_at_next"] = float(
+                    hop_data.arrival_at_next
+                )
 
         return step_results if step_results else None
