@@ -12,14 +12,6 @@ class TrafficRoutingMetric:
     it simply reads the completed packets processed during the current step and
     formats their delay and hop information for reporting.
     """
-    def __init__(self, step_duration_s=0.001):
-        """Initialize the traffic routing metric.
-
-        Args:
-            step_duration_s (float): The duration of a single simulation step in seconds.
-                Defaults to 0.001.
-        """
-        self.step_duration_s = step_duration_s
 
     def __call__(self, app: NetworkAwareApplication, _placement, infra: Network,
                  **_kwargs):
@@ -41,7 +33,10 @@ class TrafficRoutingMetric:
         if infra.step_telemetry:
 
             for _, (packet, hop_data) in enumerate(infra.step_telemetry):
-                prefix = f"step_{app.current_step}_pkt_{packet.id}_hop_{packet.hop_count}"
+                prefix = (
+                    f"step_{app.current_step}_pkt_{packet.id}"
+                    f"_hop_{packet.hop_count}"
+                )
 
                 step_results[f"{prefix}_hop"] = hop_data.hop
                 step_results[f"{prefix}_processing_ms"] = float(
