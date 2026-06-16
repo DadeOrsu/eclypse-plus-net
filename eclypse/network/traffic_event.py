@@ -194,9 +194,9 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
                                        for p in shuffled_packets])
                 infra.logger.info(f"{router} order: [{order_log}]")
 
-            self._forward_shuffled_packets(shuffled_packets,
+            self._forward_shuffled_packets(
+                                            shuffled_packets,
                                             current_time_s,
-                                            app,
                                             infra,
                                             next_step_buffers
                                         )
