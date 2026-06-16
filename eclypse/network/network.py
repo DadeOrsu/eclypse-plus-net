@@ -3,7 +3,7 @@
 import networkx as nx
 from collections import defaultdict, deque
 from eclypse.graph import Infrastructure
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from constants import (
     DEFAULT_BANDWIDTH_MBPS,
     DEFAULT_LENGTH_KM,
@@ -68,8 +68,10 @@ class Network(Infrastructure):
 
         self.step_telemetry = []
 
-    def add_edge(self, u_of_edge: str, v_of_edge: str, bandwidth_mbps: float = DEFAULT_BANDWIDTH_MBPS,
-                 length_km: float = DEFAULT_LENGTH_KM, propagation_speed_km_s: float = DEFAULT_PROPAGATION_SPEED_KM_S,
+    def add_edge(self, u_of_edge: str, v_of_edge: str,
+                 bandwidth_mbps: float = DEFAULT_BANDWIDTH_MBPS,
+                 length_km: float = DEFAULT_LENGTH_KM,
+                 propagation_speed_km_s: float = DEFAULT_PROPAGATION_SPEED_KM_S,
                  **attr):
         """Add an edge to the network with queuing parameters.
 
@@ -89,7 +91,7 @@ class Network(Infrastructure):
         attr['bandwidth_mbps'] = bandwidth_mbps
         attr['length_km'] = length_km
         attr['propagation_speed_km_s'] = propagation_speed_km_s
-        attr['cost'] = 1/(bandwidth_mbps * MBPS_TO_BPS)  # Cost for OSPF routing (inverse of bandwidth)
+        attr['cost'] = 1/(bandwidth_mbps * MBPS_TO_BPS)  # Cost for OSPF routing
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
     def update_link_latencies(self):
@@ -100,12 +102,13 @@ class Network(Infrastructure):
             link_delays = defaultdict(float)
             link_counts = defaultdict(int)
 
-            # Calculate the total delay for each link based on the telemetry of the current step
+            # Calculate the total delay for each link based on the telemetry of the
+            # current step
             for _, hop_info in self.step_telemetry:
                 u, v = hop_info.hop.split("->")
 
-                # The total delay for this hop is the sum of processing, queuing, transmission,
-                # and propagation delays
+                # The total delay for this hop is the sum of processing, queuing,
+                # transmission and propagation delays
                 total_hop_delay = (hop_info.processing_ms +
                                 hop_info.queue_ms +
                                 hop_info.transmission_ms +
@@ -114,11 +117,11 @@ class Network(Infrastructure):
                 link_delays[(u, v)] += total_hop_delay
                 link_counts[(u, v)] += 1
 
-            # Update the attribute 'latency' for each link based on the average delay observed
-            # during this step
+            # Update the attribute 'latency' for each link based on the average delay
+            # observed during this step
             for u, v, data in self.edges(data=True):
-                # Check the direction u -> v for the link, and if we have telemetry data for it,
-                # calculate the average delay
+                # Check the direction u -> v for the link
+                # if we have telemetry data for it calculate the average delay
                 if (u, v) in link_counts:
                     avg_delay = link_delays[(u, v)] / link_counts[(u, v)]
                     self[u][v]['latency'] = avg_delay
@@ -127,13 +130,18 @@ class Network(Infrastructure):
                 # we can optionally set a default latency
                 else:
                     d_proc = self.processing_time(u, v) * SEC_TO_MS
-                    d_prop = (data.get("length_km", MIN_LENGTH_KM) /
-                            data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)) * SEC_TO_MS if data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED) > 0 else 0.0
+                    speed = data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
+                    length = data.get("length_km", MIN_LENGTH_KM)
 
-                    # Estimate the transmission delay based on the bandwidth and a typical packet size
-                    # (e.g., 1500 bytes)
+                    d_prop = (length / speed) * SEC_TO_MS if speed > 0 else 0.0
+                    # Estimate the transmission delay based on the bandwidth and a
+                    # typical packet size (e.g., 1500 bytes)
                     R = data.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS) * MBPS_TO_BPS
-                    d_transm = ((1500 * BYTES_TO_BITS) / R) * SEC_TO_MS if R > 0 else 0.0
+                    d_transm = (
+                        ((1500 * BYTES_TO_BITS) / R) * SEC_TO_MS
+                        if R > 0
+                        else 0.0
+                    )
 
                     self[u][v]['latency'] = d_proc + d_prop + d_transm
 
@@ -144,7 +152,9 @@ class Network(Infrastructure):
         # Dynamic calculation of the next hop using OSPF path algorithm
         path = self.path(u, packet.dst, cost_attr='cost')
         if not path:
-            self.logger.warning(f"Packet {packet.id} droppato: Nessuna rotta per {packet.dst}")
+            self.logger.warning(
+                f"Packet {packet.id} dropped: No routes for {packet.dst}"
+                )
             return None
 
         v = path[0][1]
@@ -152,7 +162,8 @@ class Network(Infrastructure):
 
         R = edge_data.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS) * MBPS_TO_BPS
 
-        # Calculate the queuing delay based on the current queue length and the link bandwidth
+        # Calculate the queuing delay based on the current queue length
+        # and the link bandwidth
         queue = self.link_queues[(u, v)]
 
         # If there is a recorded time for the last packet processed on this link
@@ -176,18 +187,20 @@ class Network(Infrastructure):
 
         d_proc = self.processing_time(u, v)
 
-        # Calculate the queuing delay based ONLY on the packets actually left in the queue
+        # Calculate the queuing delay based on the packets actually left in the queue
         d_queue = 0.0
         if R > 0:
             for queued_packet in queue:
                 d_queue += ((queued_packet.size * BYTES_TO_BITS) / R)
 
         d_transm = ((packet.size * BYTES_TO_BITS) / R) if R > 0 else 0.0
-        d_prop = (edge_data.get("length_km", MIN_LENGTH_KM) /
-                  edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)) if edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED) > 0 else 0.0
 
-        # Queue the current packet (which will affect subsequent ones at the same time or
-        # in the future)
+        length = edge_data.get("length_km", MIN_LENGTH_KM)
+        speed = edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
+        d_prop = (
+            (length / speed) if speed > 0 else 0.0
+        )
+        # Queue the current packet
         queue.append(packet)
 
         # Calculate the times for the telemetry
