@@ -23,7 +23,8 @@ class PacketGenerationEvent(EclypseEvent):
             triggers=[CascadeTrigger("step")]
         )
 
-    def __call__(self, app: NetworkAwareApplication, placement, infra: Network, **kwargs):
+    def __call__(self, app: NetworkAwareApplication, _placement, _infra: Network,
+                **_kwargs):
         """Generate packets for the current simulation step.
 
         Advances the internal application clock and triggers the creation of
@@ -42,5 +43,11 @@ class PacketGenerationEvent(EclypseEvent):
         """
         app.current_step += 1
         app.generate_traffic_for_step(app.current_step)
-        self.logger.debug(f"step {app.current_step}: App '{app.id}' has generated {len(app.generated_packets)} packets.")
+        self.logger.debug(
+            "step %s: App '%s' has generated %s packets.",
+            app.current_step,
+            app.id,
+            len(app.generated_packets),
+        )
+
         return {"packets_generated": len(app.generated_packets)}
