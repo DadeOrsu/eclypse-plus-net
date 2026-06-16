@@ -35,7 +35,18 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
 
     def _inject_generated_packets(self, app: NetworkAwareApplication,
                                   placement, infra: Network) -> None:
-        """Helper to inject new packets into the network."""
+        """Inject new packets into the network infrastructure.
+
+        Reads the generated packets from the application layer, resolves their physical
+        source and destination nodes using the placement strategy, and places them into
+        the router buffer of their source node.
+
+        Args:
+            app (NetworkAwareApplication): The application layer containing generated \
+            packets.
+            placement: The placement strategy to resolve service to node mapping.
+            infra (Network): The network infrastructure containing router buffers.
+        """
         for packet in app.generated_packets:
             try:
                 src_node = placement.service_placement(service_id=packet.src)
@@ -53,7 +64,22 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
 
     def _prepare_incoming_queues(self, router: str, buffer: list,
                                  infra: Network) -> tuple[dict, dict]:
-        """Helper to separate incoming packets by source and determine link bandwidths."""
+        """Separate incoming packets by source and determine link bandwidths.
+
+        Analyzes the current buffer of a router, groups packets based on their previous
+        hop,and retrieves the bandwidth capacity of each incoming link from the
+        infrastructure.
+
+        Args:
+            router (str): The identifier of the router being processed.
+            buffer (list): The list of packets currently in the router's buffer.
+            infra (Network): The network infrastructure to query for link data.
+
+        Returns:
+            tuple[dict, dict]: A tuple containing two dictionaries:
+                - The first maps the previous node ID to a list of its packets.
+                - The second maps the previous node ID to its link bandwidth in Mbps.
+        """
         incoming_queues = defaultdict(list)
         for pkt in buffer:
             incoming_queues[pkt.previous_node].append(pkt)
@@ -70,10 +96,20 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
 
     def _build_probabilistic_queue(self, incoming_queues: dict[str, list],
                                    bandwidths: dict[str, float]) -> list:
-        """It merges the input queues in a probabilistic manner based on bandwidth.
+        """Merge input queues probabilistically based on bandwidth.
 
-        Implement a probabilistic multiplexer: it extracts packets from the input
-        queues by tossing a 'weighted coin' based on the bandwidth values.
+        Implement a probabilistic multiplexer: it extracts packets from the active
+        input queues by tossing a 'weighted coin' based on the bandwidth values,
+        simulating hardware fair-queuing based on link capacity.
+
+        Args:
+            incoming_queues (dict[str, list]): Dictionary of packets grouped by their \
+                source.
+            bandwidths (dict[str, float]): Dictionary of bandwidths for each source \
+                link.
+
+        Returns:
+            list: A single, ordered list of interleaved packets ready for processing.
         """
         merged_queue = []
 
@@ -96,7 +132,19 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
 
     def _forward_shuffled_packets(self, shuffled_packets: list, current_time_s: float,
                                   infra: Network, next_step_buffers: dict) -> None:
-        """Helper to route packets sequentially and distribute them to their next destination."""
+        """Route packets sequentially and distribute them to their next destination.
+
+        Iterates over the multiplexed queue of packets, asking the infrastructure to
+        forward each one by a single hop. Packets that have not yet reached their
+        destination are placed in a temporary buffer for the next simulation step.
+
+        Args:
+            shuffled_packets (list): The probabilistically ordered list of packets.
+            current_time_s (float): The current simulation time in seconds.
+            infra (Network): The network infrastructure performing the routing.
+            next_step_buffers (dict): A dictionary to hold packets bound for other \
+                routers.
+        """
         for pkt in shuffled_packets:
             next_node = infra.forward_one_hop(pkt, current_time_s)
 
@@ -106,8 +154,22 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
                 else:
                     next_step_buffers[next_node].append(pkt)
 
-    def __call__(self, app: NetworkAwareApplication, placement, infra: Network, **kwargs):
-        """Execute the routing logic for packets generated in the current step."""
+    def __call__(self, app: NetworkAwareApplication, placement, infra: Network,
+                 **_kwargs):
+        """Execute the routing logic for packets generated in the current step.
+
+        Orchestrates the entire routing process for a single simulation step: injects
+        new traffic, processes buffers on all active routers using probabilistic
+        multiplexing, advances packets by one hop, and prepares the network state for
+        the following step.
+
+        Args:
+            app (NetworkAwareApplication): The application layer with generated \
+            packets and step info.
+            placement: The placement strategy manager.
+            infra (Network): The network infrastructure.
+            **kwargs: Additional keyword arguments.
+        """
         infra.step_telemetry.clear()
         current_time_s = app.current_step * self.step_duration_s
 
@@ -128,10 +190,16 @@ class TrafficRoutingExecutionEvent(EclypseEvent):
             shuffled_packets = self._build_probabilistic_queue(incoming_queues, bws)
 
             if len(shuffled_packets) > 1:
-                order_log = ", ".join([f"{p.id} ({p.previous_node})" for p in shuffled_packets])
+                order_log = ", ".join([f"{p.id} ({p.previous_node})"
+                                       for p in shuffled_packets])
                 infra.logger.info(f"{router} order: [{order_log}]")
 
-            self._forward_shuffled_packets(shuffled_packets, current_time_s, app, infra, next_step_buffers)
+            self._forward_shuffled_packets(shuffled_packets,
+                                            current_time_s,
+                                            app,
+                                            infra,
+                                            next_step_buffers
+                                        )
 
             infra.router_buffers[router].clear()
 
