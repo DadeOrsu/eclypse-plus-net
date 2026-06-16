@@ -17,7 +17,17 @@ from constants import (
 
 @dataclass(slots=True)
 class HopInfo:
-    """Represent detailed information about a single hop in a packet's path."""
+    """Represent detailed telemetry information for a single network hop.
+
+    Attributes:
+        hop (str): The edge identifier representing the hop (e.g., 'A->B').
+        processing_ms (float): The processing delay in milliseconds.
+        queue_ms (float): The queuing delay in milliseconds.
+        transmission_ms (float): The transmission delay in milliseconds.
+        propagation_ms (float): The propagation delay in milliseconds.
+        queue_length (int): The number of packets in the queue at arrival time.
+        arrival_at_next (float): The absolute arrival time at the next node in ms.
+    """
     hop: str
     processing_ms: float
     queue_ms: float
@@ -29,7 +39,18 @@ class HopInfo:
 
 @dataclass(slots=True)
 class Packet:
-    """Data class to represent a stateful network packet for Hop-by-Hop routing."""
+    """Represent a stateful network packet for hop-by-hop routing simulation.
+
+    Attributes:
+        id (int): The unique identifier of the packet.
+        src (str): The source node identifier.
+        dst (str): The destination node identifier.
+        size (int): The size of the packet in bytes.
+        step_created (int): The simulation step when the packet was created.
+        current_node (str): The node where the packet is currently located.
+        previous_node (str): The node the packet just left.
+        hop_count (int): The number of hops the packet has traversed so far.
+    """
     id: int
     src: str
     dst: str
@@ -40,7 +61,16 @@ class Packet:
     hop_count: int = 0
 
 def ospf_path_algorithm(g: nx.Graph, source: str, target: str) -> list[str]:
-    """Custom path algorithm for ECLYPSE to strictly use OSPF 'cost'."""
+    """Compute the shortest path using Dijkstra's algorithm based on OSPF cost.
+
+    Args:
+        g (nx.Graph): The network graph topology.
+        source (str): The starting node identifier.
+        target (str): The destination node identifier.
+
+    Returns:
+        list[str]: A list of node identifiers representing the shortest path.
+    """
     return nx.dijkstra_path(g, source, target, weight='cost')
 
 class Network(Infrastructure):
@@ -59,13 +89,16 @@ class Network(Infrastructure):
             *args: Variable length argument list passed to the base class.
             **kwargs: Arbitrary keyword arguments passed to the base class.
         """
+        # Assign the routing algorithm for standard execution
         kwargs['path_algorithm'] = ospf_path_algorithm
         super().__init__(*args, **kwargs)
+        # The queues of packets waiting to be transmitted on a specific link
         self.link_queues = defaultdict(deque)
-
+        # The registered time a packet traversed the link
         self.link_step_time = defaultdict(float)
+        # The list of packets that are sitting in a specific node waiting
         self.router_buffers = defaultdict(list)
-
+        # Hop telemetry tracking
         self.step_telemetry = []
 
     def add_edge(self, u_of_edge: str, v_of_edge: str,
@@ -97,7 +130,9 @@ class Network(Infrastructure):
     def update_link_latencies(self):
             """Calculate and update the latency attribute for each link.
 
-            The calculation is based on the telemetry collected during the current step.
+            The calculation evaluates the telemetry collected during the current step
+            and updates the dynamic latency metric. If no telemetry is present, it
+            estimates the latency based on default packet sizes and link properties.
             """
             link_delays = defaultdict(float)
             link_counts = defaultdict(int)
@@ -146,7 +181,19 @@ class Network(Infrastructure):
                     self[u][v]['latency'] = d_proc + d_prop + d_transm
 
     def forward_one_hop(self, packet: Packet, current_time: float) -> str | None:
-        """Calculate the next hop for a packet and update its state based on queuing logic."""
+        """Calculate the next hop for a packet and update its telemetry state.
+
+        Resolves the next hop using OSPF routing, evaluates queuing, transmission,
+        processing, and propagation delays using store-and-forward logic, and
+        updates the packet's internal state.
+
+        Args:
+            packet (Packet): The packet object to be forwarded.
+            current_time (float): The absolute simulation time in seconds.
+
+        Returns:
+            str | None: The identifier of the next node, or None if no route exists.
+        """
         u = packet.current_node
 
         # Dynamic calculation of the next hop using OSPF path algorithm
