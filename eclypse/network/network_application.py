@@ -66,13 +66,10 @@ class NetworkAwareApplication(Application):
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
         self.logger.info(
-            "Added flow %s->%s: ~%s pkt/step (avg), size %sB",
-            u_of_edge,
-            v_of_edge,
-            avg_packets_per_step,
-            packet_size_bytes
+            f"Added flow {u_of_edge}->{v_of_edge}, "
+            f"{avg_packets_per_step} pkt/step (avg), "
+            f"pkt/step (avg), size {packet_size_bytes}B"
         )
-
     def generate_traffic_for_step(self, step: int) -> None:
         """Generate traffic based on the defined flows in the application graph.
 

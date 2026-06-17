@@ -5,12 +5,14 @@ from eclypse.workflow.trigger import CascadeTrigger
 from network_application import NetworkAwareApplication
 from network import Network
 
+
 class PacketGenerationEvent(EclypseEvent):
     """Worker event that generates network packets to be routed.
 
     This event triggers on every simulation step to instruct the application
     to generate new traffic flows based on its internal graph and patterns.
     """
+
     def __init__(self):
         """Initialize the packet generation event.
 
@@ -20,11 +22,12 @@ class PacketGenerationEvent(EclypseEvent):
         super().__init__(
             name="packet_generation",
             event_type="application",
-            triggers=[CascadeTrigger("step")]
+            triggers=[CascadeTrigger("step")],
         )
 
-    def __call__(self, app: NetworkAwareApplication, _placement, _infra: Network,
-                **_kwargs):
+    def __call__(
+        self, app: NetworkAwareApplication, _placement, _infra: Network, **_kwargs
+    ):
         """Generate packets for the current simulation step.
 
         Advances the internal application clock and triggers the creation of
@@ -43,6 +46,10 @@ class PacketGenerationEvent(EclypseEvent):
         """
         app.current_step += 1
         app.generate_traffic_for_step(app.current_step)
-        self.logger.debug(f"step {app.current_step}: App '{app.id}' has generated {len(app.generated_packets)} packets.")
+        self.logger.debug(
+            f"step {app.current_step}: "
+            f"App '{app.id}' has generated "
+            f"{len(app.generated_packets)} packets."
+        )
 
         return {"packets_generated": len(app.generated_packets)}
