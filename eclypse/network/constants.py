@@ -15,7 +15,9 @@ MIN_LENGTH_KM = 0.0
 """Minimum allowable physical length for a link."""
 
 MIN_PROPAGATION_SPEED = 0.001
-"""Minimum allowable propagation speed to prevent division by zero in delay calculations."""
+"""Minimum allowable propagation speed to prevent division by zero in delay
+calculations.
+"""
 
 # Mathematical Conversion Factors
 MBPS_TO_BPS = 1_000_000.0
