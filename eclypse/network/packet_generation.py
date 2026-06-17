@@ -43,11 +43,6 @@ class PacketGenerationEvent(EclypseEvent):
         """
         app.current_step += 1
         app.generate_traffic_for_step(app.current_step)
-        self.logger.debug(
-            "step %s: App '%s' has generated %s packets.",
-            app.current_step,
-            app.id,
-            len(app.generated_packets),
-        )
+        self.logger.debug(f"step {app.current_step}: App '{app.id}' has generated {len(app.generated_packets)} packets.")
 
         return {"packets_generated": len(app.generated_packets)}
