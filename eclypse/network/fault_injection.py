@@ -1,11 +1,11 @@
-"""This module defines a fault injection event that simulates a link failure in the network."""
+"""A fault injection event that simulates a link failure in the network."""
 
 from network import Network
 from eclypse.workflow.event import once_at
 
 
 @once_at(step=50, event_type="infrastructure", name="fault_injection")
-def FaultInjectionEvent(infr: Network, placement_view, **kwargs):
+def FaultInjectionEvent(infr: Network, _placement_view, **_kwargs):
     """Event that fires EXACTLY at step 50.
 
     Removes the link and forces an OSPF recalculation.
