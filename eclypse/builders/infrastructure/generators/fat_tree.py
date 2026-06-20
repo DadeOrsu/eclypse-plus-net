@@ -15,9 +15,7 @@ ACM SIGCOMM CCR, 2008, https://dl.acm.org/doi/10.1145/1402958.1402967
 
 from __future__ import annotations
 
-from typing import (
-    TYPE_CHECKING,
-)
+from typing import TYPE_CHECKING, TypeVar
 
 from eclypse.graph import Infrastructure
 
@@ -32,6 +30,8 @@ if TYPE_CHECKING:
         UpdatePolicies,
     )
 
+TInfrastructure = TypeVar("TInfrastructure", bound=Infrastructure)
+
 
 def get_fat_tree(
     k: int,
@@ -44,7 +44,8 @@ def get_fat_tree(
     resource_init: InitPolicy = "max",
     path_algorithm: Callable[[nx.Graph, str, str], list[str]] | None = None,
     seed: int | None = None,
-) -> Infrastructure:
+    infrastructure_cls: type[TInfrastructure] = Infrastructure,
+) -> TInfrastructure:
     """Factory for generating a Fat-Tree network topology.
 
     This function builds a symmetrical Fat-Tree structure with parameter `k`,
@@ -72,6 +73,7 @@ def get_fat_tree(
             Algorithm to compute paths. Defaults to None.
             Defaults to None.
         seed (int | None): Seed for random number generation. Defaults to None.
+        infrastructure_cls: Type of infrastructure to be returned.
 
     Returns:
         Infrastructure: A Fat-Tree topology with switches and hosts.
@@ -79,7 +81,7 @@ def get_fat_tree(
     if k % 2 != 0:
         raise ValueError(f"k must be an even number (got {k}) for a Fat-Tree topology.")
 
-    infra = Infrastructure(
+    infrastructure = infrastructure_cls(
         infrastructure_id=infrastructure_id,
         update_policies=update_policies,
         node_assets=node_assets,
@@ -98,7 +100,7 @@ def get_fat_tree(
     # Core switches
     for i in range(num_core_switches):
         core_id = f"core_{i}"
-        infra.add_node(core_id, strict=strict)
+        infrastructure.add_node(core_id, strict=strict)
 
         # Pods
     for pod in range(num_pods):
@@ -107,27 +109,27 @@ def get_fat_tree(
         for a in range(num_agg_switches_per_pod):
             agg_id = f"agg_{pod}_{a}"
             agg_switches.append(agg_id)
-            infra.add_node(agg_id, strict=strict)
+            infrastructure.add_node(agg_id, strict=strict)
 
             # Edge switches + hosts
         for e in range(num_edge_switches_per_pod):
             edge_id = f"edge_{pod}_{e}"
-            infra.add_node(edge_id, strict=strict)
+            infrastructure.add_node(edge_id, strict=strict)
             # Edge <-> Aggregation
             for agg_id in agg_switches:
-                infra.add_edge(edge_id, agg_id, symmetric=True, strict=strict)
+                infrastructure.add_edge(edge_id, agg_id, symmetric=True, strict=strict)
 
                 # Hosts under edge
             for h in range(num_hosts_per_edge):
                 host_id = f"host_{pod}_{e}_{h}"
-                infra.add_node(host_id, strict=strict)
-                infra.add_edge(host_id, edge_id, symmetric=True, strict=strict)
+                infrastructure.add_node(host_id, strict=strict)
+                infrastructure.add_edge(host_id, edge_id, symmetric=True, strict=strict)
 
                 # Aggregation <-> Core
         for i, agg_id in enumerate(agg_switches):
             for j in range(num_pods // 2):
                 core_index = i * (num_pods // 2) + j
                 core_id = f"core_{core_index}"
-                infra.add_edge(agg_id, core_id, symmetric=True, strict=strict)
+                infrastructure.add_edge(agg_id, core_id, symmetric=True, strict=strict)
 
-    return infra
+    return infrastructure
