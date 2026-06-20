@@ -73,6 +73,7 @@ def get_random(
             The algorithm to compute the paths between nodes. Defaults to
             None.
         seed (int | None): The seed for the random number generator. Defaults to None.
+        infrastructure_cls: Type of infrastructure to be returned.
 
     Returns:
         Infrastructure: The random infrastructure.
