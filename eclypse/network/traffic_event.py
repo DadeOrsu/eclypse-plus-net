@@ -4,9 +4,9 @@ import random
 from collections import defaultdict
 from eclypse.workflow.event import EclypseEvent
 from eclypse.workflow.trigger import CascadeTrigger
-from network_application import NetworkApplication
-from network import Network
-from constants import (
+from .network_application import NetworkApplication
+from .network import Network
+from .constants import (
     DEFAULT_BANDWIDTH_MBPS
 )
 

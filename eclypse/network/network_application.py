@@ -2,8 +2,8 @@
 
 import numpy as np
 from eclypse.graph import Application
-from network import Packet
-from constants import(
+from .network import Packet
+from .constants import(
     DEFAULT_AVG_PACKETS_PER_STEP,
     DEFAULT_PACKET_SIZE_BYTES
 )

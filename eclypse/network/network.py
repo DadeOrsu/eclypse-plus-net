@@ -4,7 +4,7 @@ import networkx as nx
 from collections import defaultdict, deque
 from eclypse.graph import Infrastructure
 from dataclasses import dataclass
-from constants import (
+from .constants import (
     DEFAULT_BANDWIDTH_MBPS,
     DEFAULT_LENGTH_KM,
     DEFAULT_PROPAGATION_SPEED_KM_S,

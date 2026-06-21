@@ -2,8 +2,8 @@
 
 from eclypse.workflow.event import EclypseEvent
 from eclypse.workflow.trigger import CascadeTrigger
-from network_application import NetworkApplication
-from network import Network
+from .network_application import NetworkApplication
+from .network import Network
 
 
 class PacketGenerationEvent(EclypseEvent):
