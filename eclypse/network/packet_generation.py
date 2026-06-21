@@ -25,9 +25,7 @@ class PacketGenerationEvent(EclypseEvent):
             triggers=[CascadeTrigger("step")],
         )
 
-    def __call__(
-        self, app: NetworkApplication, _placement, _infra: Network, **_kwargs
-    ):
+    def __call__(self, app: NetworkApplication, _placement, _infra: Network, **_kwargs):
         """Generate packets for the current simulation step.
 
         Advances the internal application clock and triggers the creation of

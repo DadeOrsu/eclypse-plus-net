@@ -6,9 +6,7 @@ from eclypse.workflow.event import EclypseEvent
 from eclypse.workflow.trigger import CascadeTrigger
 from .network_application import NetworkApplication
 from .network import Network
-from .constants import (
-    DEFAULT_BANDWIDTH_MBPS
-)
+from .constants import DEFAULT_BANDWIDTH_MBPS
 
 
 class RoutingEvent(EclypseEvent):
@@ -19,6 +17,7 @@ class RoutingEvent(EclypseEvent):
     destination placements, performing the heavy routing calculations, and
     moving the results to the completed packets basket.
     """
+
     def __init__(self, step_duration_s=0.001):
         """Initialize the traffic routing execution event.
 
@@ -30,11 +29,12 @@ class RoutingEvent(EclypseEvent):
         super().__init__(
             name="traffic_routing_execution",
             event_type="application",
-            triggers=[CascadeTrigger("step")]
+            triggers=[CascadeTrigger("step")],
         )
 
-    def _inject_generated_packets(self, app: NetworkApplication,
-                                  placement, infra: Network) -> None:
+    def _inject_generated_packets(
+        self, app: NetworkApplication, placement, infra: Network
+    ) -> None:
         """Inject new packets into the network infrastructure.
 
         Reads the generated packets from the application layer, resolves their physical
@@ -62,8 +62,9 @@ class RoutingEvent(EclypseEvent):
 
         app.generated_packets.clear()
 
-    def _prepare_incoming_queues(self, router: str, buffer: list,
-                                 infra: Network) -> tuple[dict, dict]:
+    def _prepare_incoming_queues(
+        self, router: str, buffer: list, infra: Network
+    ) -> tuple[dict, dict]:
         """Separate incoming packets by source and determine link bandwidths.
 
         Analyzes the current buffer of a router, groups packets based on their previous
@@ -90,12 +91,13 @@ class RoutingEvent(EclypseEvent):
                 bws[prev_node] = DEFAULT_BANDWIDTH_MBPS * 10
             else:
                 edge_data = infra.get_edge_data(prev_node, router, default={})
-                bws[prev_node] = edge_data.get('bandwidth_mbps', DEFAULT_BANDWIDTH_MBPS)
+                bws[prev_node] = edge_data.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS)
 
         return incoming_queues, bws
 
-    def _build_probabilistic_queue(self, incoming_queues: dict[str, list],
-                                   bandwidths: dict[str, float]) -> list:
+    def _build_probabilistic_queue(
+        self, incoming_queues: dict[str, list], bandwidths: dict[str, float]
+    ) -> list:
         """Merge input queues probabilistically based on bandwidth.
 
         Implement a probabilistic multiplexer: it extracts packets from the active
@@ -120,18 +122,22 @@ class RoutingEvent(EclypseEvent):
             # Retrieve the associated weights (bandwidth)
             active_weights = [bandwidths[src] for src in active_sources]
             # Probabilistic extraction of the packet with P = Bandwidth/Sum(Bandwidths)
-            chosen_source = random.choices(active_sources,
-                                        weights=active_weights,
-                                        k=1)[0]
+            chosen_source = random.choices(active_sources, weights=active_weights, k=1)[
+                0
+            ]
             # Remove packet from the chosen queue and insert it into the merged queue
             packet = incoming_queues[chosen_source].pop(0)
             merged_queue.append(packet)
 
         return merged_queue
 
-
-    def _forward_shuffled_packets(self, shuffled_packets: list, current_time_s: float,
-                                  infra: Network, next_step_buffers: dict) -> None:
+    def _forward_shuffled_packets(
+        self,
+        shuffled_packets: list,
+        current_time_s: float,
+        infra: Network,
+        next_step_buffers: dict,
+    ) -> None:
         """Route packets sequentially and distribute them to their next destination.
 
         Iterates over the multiplexed queue of packets, asking the infrastructure to
@@ -150,12 +156,11 @@ class RoutingEvent(EclypseEvent):
 
             if next_node is not None:
                 if next_node == pkt.dst:
-                    pass # The packet has reached its destination
+                    pass  # The packet has reached its destination
                 else:
                     next_step_buffers[next_node].append(pkt)
 
-    def __call__(self, app: NetworkApplication, placement, infra: Network,
-                 **_kwargs):
+    def __call__(self, app: NetworkApplication, placement, infra: Network, **_kwargs):
         """Execute the routing logic for packets generated in the current step.
 
         Orchestrates the entire routing process for a single simulation step: injects
@@ -190,16 +195,14 @@ class RoutingEvent(EclypseEvent):
             shuffled_packets = self._build_probabilistic_queue(incoming_queues, bws)
 
             if len(shuffled_packets) > 1:
-                order_log = ", ".join([f"{p.id} ({p.previous_node})"
-                                       for p in shuffled_packets])
+                order_log = ", ".join(
+                    [f"{p.id} ({p.previous_node})" for p in shuffled_packets]
+                )
                 infra.logger.info(f"{router} order: [{order_log}]")
 
             self._forward_shuffled_packets(
-                                            shuffled_packets,
-                                            current_time_s,
-                                            infra,
-                                            next_step_buffers
-                                        )
+                shuffled_packets, current_time_s, infra, next_step_buffers
+            )
 
             infra.router_buffers[router].clear()
 

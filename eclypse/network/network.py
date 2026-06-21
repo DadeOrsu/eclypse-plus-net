@@ -12,8 +12,9 @@ from .constants import (
     MIN_PROPAGATION_SPEED,
     MBPS_TO_BPS,
     SEC_TO_MS,
-    BYTES_TO_BITS
+    BYTES_TO_BITS,
 )
+
 
 @dataclass(slots=True)
 class HopInfo:
@@ -28,6 +29,7 @@ class HopInfo:
         queue_length (int): The number of packets in the queue at arrival time.
         arrival_at_next (float): The absolute arrival time at the next node in ms.
     """
+
     hop: str
     processing_ms: float
     queue_ms: float
@@ -51,6 +53,7 @@ class Packet:
         previous_node (str): The node the packet just left.
         hop_count (int): The number of hops the packet has traversed so far.
     """
+
     id: int
     src: str
     dst: str
@@ -59,6 +62,7 @@ class Packet:
     current_node: str = ""
     previous_node: str = "APP"
     hop_count: int = 0
+
 
 def ospf_path_algorithm(g: nx.Graph, source: str, target: str) -> list[str]:
     """Compute the shortest path using Dijkstra's algorithm based on OSPF cost.
@@ -71,7 +75,8 @@ def ospf_path_algorithm(g: nx.Graph, source: str, target: str) -> list[str]:
     Returns:
         list[str]: A list of node identifiers representing the shortest path.
     """
-    return nx.dijkstra_path(g, source, target, weight='cost')
+    return nx.dijkstra_path(g, source, target, weight="cost")
+
 
 class Network(Infrastructure):
     """Extend the Infrastructure model of ECLYPSE to simulate physical queuing.
@@ -79,6 +84,7 @@ class Network(Infrastructure):
     This class simulates a network of routers using a queuing logic,
     managing physical packet delays and an on-demand LRU cache for OSPF routing.
     """
+
     def __init__(self, *args, **kwargs):
         """Initialize the Network infrastructure.
 
@@ -90,7 +96,7 @@ class Network(Infrastructure):
             **kwargs: Arbitrary keyword arguments passed to the base class.
         """
         # Assign the routing algorithm for standard execution
-        kwargs['path_algorithm'] = ospf_path_algorithm
+        kwargs["path_algorithm"] = ospf_path_algorithm
         super().__init__(*args, **kwargs)
         # The queues of packets waiting to be transmitted on a specific link
         self.link_queues = defaultdict(deque)
@@ -101,11 +107,15 @@ class Network(Infrastructure):
         # Hop telemetry tracking
         self.step_telemetry = []
 
-    def add_edge(self, u_of_edge: str, v_of_edge: str,
-                 bandwidth_mbps: float = DEFAULT_BANDWIDTH_MBPS,
-                 length_km: float = DEFAULT_LENGTH_KM,
-                 propagation_speed_km_s: float = DEFAULT_PROPAGATION_SPEED_KM_S,
-                 **attr):
+    def add_edge(
+        self,
+        u_of_edge: str,
+        v_of_edge: str,
+        bandwidth_mbps: float = DEFAULT_BANDWIDTH_MBPS,
+        length_km: float = DEFAULT_LENGTH_KM,
+        propagation_speed_km_s: float = DEFAULT_PROPAGATION_SPEED_KM_S,
+        **attr,
+    ):
         """Add an edge to the network with queuing parameters.
 
         Automatically calculates and injects physical queuing parameters
@@ -121,64 +131,62 @@ class Network(Infrastructure):
                 Defaults to 200000.0.
             **attr: Additional attributes to apply to the edge.
         """
-        attr['bandwidth_mbps'] = bandwidth_mbps
-        attr['length_km'] = length_km
-        attr['propagation_speed_km_s'] = propagation_speed_km_s
-        attr['cost'] = 1/(bandwidth_mbps * MBPS_TO_BPS)  # Cost for OSPF routing
+        attr["bandwidth_mbps"] = bandwidth_mbps
+        attr["length_km"] = length_km
+        attr["propagation_speed_km_s"] = propagation_speed_km_s
+        attr["cost"] = 1 / (bandwidth_mbps * MBPS_TO_BPS)  # Cost for OSPF routing
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
     def update_link_latencies(self):
-            """Calculate and update the latency attribute for each link.
+        """Calculate and update the latency attribute for each link.
 
-            The calculation evaluates the telemetry collected during the current step
-            and updates the dynamic latency metric. If no telemetry is present, it
-            estimates the latency based on default packet sizes and link properties.
-            """
-            link_delays = defaultdict(float)
-            link_counts = defaultdict(int)
+        The calculation evaluates the telemetry collected during the current step
+        and updates the dynamic latency metric. If no telemetry is present, it
+        estimates the latency based on default packet sizes and link properties.
+        """
+        link_delays = defaultdict(float)
+        link_counts = defaultdict(int)
 
-            # Calculate the total delay for each link based on the telemetry of the
-            # current step
-            for _, hop_info in self.step_telemetry:
-                u, v = hop_info.hop.split("->")
+        # Calculate the total delay for each link based on the telemetry of the
+        # current step
+        for _, hop_info in self.step_telemetry:
+            u, v = hop_info.hop.split("->")
 
-                # The total delay for this hop is the sum of processing, queuing,
-                # transmission and propagation delays
-                total_hop_delay = (hop_info.processing_ms +
-                                hop_info.queue_ms +
-                                hop_info.transmission_ms +
-                                hop_info.propagation_ms)
+            # The total delay for this hop is the sum of processing, queuing,
+            # transmission and propagation delays
+            total_hop_delay = (
+                hop_info.processing_ms
+                + hop_info.queue_ms
+                + hop_info.transmission_ms
+                + hop_info.propagation_ms
+            )
 
-                link_delays[(u, v)] += total_hop_delay
-                link_counts[(u, v)] += 1
+            link_delays[(u, v)] += total_hop_delay
+            link_counts[(u, v)] += 1
 
-            # Update the attribute 'latency' for each link based on the average delay
-            # observed during this step
-            for u, v, data in self.edges(data=True):
-                # Check the direction u -> v for the link
-                # if we have telemetry data for it calculate the average delay
-                if (u, v) in link_counts:
-                    avg_delay = link_delays[(u, v)] / link_counts[(u, v)]
-                    self[u][v]['latency'] = avg_delay
+        # Update the attribute 'latency' for each link based on the average delay
+        # observed during this step
+        for u, v, data in self.edges(data=True):
+            # Check the direction u -> v for the link
+            # if we have telemetry data for it calculate the average delay
+            if (u, v) in link_counts:
+                avg_delay = link_delays[(u, v)] / link_counts[(u, v)]
+                self[u][v]["latency"] = avg_delay
 
-                # If we don't have telemetry data for this link during this step,
-                # we can optionally set a default latency
-                else:
-                    d_proc = self.processing_time(u, v) * SEC_TO_MS
-                    speed = data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
-                    length = data.get("length_km", MIN_LENGTH_KM)
+            # If we don't have telemetry data for this link during this step,
+            # we can optionally set a default latency
+            else:
+                d_proc = self.processing_time(u, v) * SEC_TO_MS
+                speed = data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
+                length = data.get("length_km", MIN_LENGTH_KM)
 
-                    d_prop = (length / speed) * SEC_TO_MS if speed > 0 else 0.0
-                    # Estimate the transmission delay based on the bandwidth and a
-                    # typical packet size (e.g., 1500 bytes)
-                    R = data.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS) * MBPS_TO_BPS
-                    d_transm = (
-                        ((1500 * BYTES_TO_BITS) / R) * SEC_TO_MS
-                        if R > 0
-                        else 0.0
-                    )
+                d_prop = (length / speed) * SEC_TO_MS if speed > 0 else 0.0
+                # Estimate the transmission delay based on the bandwidth and a
+                # typical packet size (e.g., 1500 bytes)
+                R = data.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS) * MBPS_TO_BPS
+                d_transm = ((1500 * BYTES_TO_BITS) / R) * SEC_TO_MS if R > 0 else 0.0
 
-                    self[u][v]['latency'] = d_proc + d_prop + d_transm
+                self[u][v]["latency"] = d_proc + d_prop + d_transm
 
     def forward_one_hop(self, packet: Packet, current_time: float) -> str | None:
         """Calculate the next hop for a packet and update its telemetry state.
@@ -197,11 +205,11 @@ class Network(Infrastructure):
         u = packet.current_node
 
         # Dynamic calculation of the next hop using OSPF path algorithm
-        path = self.path(u, packet.dst, cost_attr='cost')
+        path = self.path(u, packet.dst, cost_attr="cost")
         if not path:
             self.logger.warning(
                 f"Packet {packet.id} dropped: No routes for {packet.dst}"
-                )
+            )
             return None
 
         v = path[0][1]
@@ -238,15 +246,13 @@ class Network(Infrastructure):
         d_queue = 0.0
         if R > 0:
             for queued_packet in queue:
-                d_queue += ((queued_packet.size * BYTES_TO_BITS) / R)
+                d_queue += (queued_packet.size * BYTES_TO_BITS) / R
 
         d_transm = ((packet.size * BYTES_TO_BITS) / R) if R > 0 else 0.0
 
         length = edge_data.get("length_km", MIN_LENGTH_KM)
         speed = edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
-        d_prop = (
-            (length / speed) if speed > 0 else 0.0
-        )
+        d_prop = (length / speed) if speed > 0 else 0.0
         # Queue the current packet
         queue.append(packet)
 
@@ -262,7 +268,7 @@ class Network(Infrastructure):
             transmission_ms=d_transm * SEC_TO_MS,
             propagation_ms=d_prop * SEC_TO_MS,
             queue_length=len(queue),
-            arrival_at_next=arrival_time_ms
+            arrival_at_next=arrival_time_ms,
         )
         self.step_telemetry.append((packet, hop_info))
 

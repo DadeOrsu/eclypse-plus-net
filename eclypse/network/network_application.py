@@ -3,10 +3,7 @@
 import numpy as np
 from eclypse.graph import Application
 from .network import Packet
-from .constants import(
-    DEFAULT_AVG_PACKETS_PER_STEP,
-    DEFAULT_PACKET_SIZE_BYTES
-)
+from .constants import DEFAULT_AVG_PACKETS_PER_STEP, DEFAULT_PACKET_SIZE_BYTES
 
 
 class NetworkApplication(Application):
@@ -32,11 +29,14 @@ class NetworkApplication(Application):
         self.current_step = 0
         self.generated_packets = []
 
-    def add_edge(self, u_of_edge: str,
-                 v_of_edge: str,
-                 packet_size_bytes: int = DEFAULT_PACKET_SIZE_BYTES,
-                 avg_packets_per_step: float = DEFAULT_AVG_PACKETS_PER_STEP,
-                 **attr):
+    def add_edge(
+        self,
+        u_of_edge: str,
+        v_of_edge: str,
+        packet_size_bytes: int = DEFAULT_PACKET_SIZE_BYTES,
+        avg_packets_per_step: float = DEFAULT_AVG_PACKETS_PER_STEP,
+        **attr,
+    ):
         """Add a logical flow edge to the application graph.
 
         Overrides the default add_edge method to automatically validate and inject
@@ -61,8 +61,8 @@ class NetworkApplication(Application):
             raise ValueError(f"Packet size must be > 0. Found: {packet_size_bytes}")
         if avg_packets_per_step < 0:
             raise ValueError(f"Packet rate must be >= 0. Found: {avg_packets_per_step}")
-        attr['packet_size_bytes'] = packet_size_bytes
-        attr['avg_packets_per_step'] = avg_packets_per_step
+        attr["packet_size_bytes"] = packet_size_bytes
+        attr["avg_packets_per_step"] = avg_packets_per_step
         super().add_edge(u_of_edge, v_of_edge, **attr)
 
         self.logger.info(
@@ -70,6 +70,7 @@ class NetworkApplication(Application):
             f"{avg_packets_per_step} pkt/step (avg), "
             f"pkt/step (avg), size {packet_size_bytes}B"
         )
+
     def generate_traffic_for_step(self, step: int) -> None:
         """Generate traffic based on the defined flows in the application graph.
 
@@ -84,7 +85,6 @@ class NetworkApplication(Application):
 
         # Iterate over all edges (flows) defined in the application
         for u, v, data in self.edges(data=True):
-
             # Retrieve the saved parameters (Lambda parameter for Poisson)
             lam_rate = data.get("avg_packets_per_step", DEFAULT_AVG_PACKETS_PER_STEP)
             size = data.get("packet_size_bytes", DEFAULT_PACKET_SIZE_BYTES)
@@ -97,10 +97,6 @@ class NetworkApplication(Application):
                 self._packet_counter += 1
 
                 packet = Packet(
-                    id=self._packet_counter,
-                    src=u,
-                    dst=v,
-                    size=size,
-                    step_created=step
+                    id=self._packet_counter, src=u, dst=v, size=size, step_created=step
                 )
                 self.generated_packets.append(packet)

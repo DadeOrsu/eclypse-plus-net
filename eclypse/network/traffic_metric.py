@@ -4,6 +4,7 @@ from eclypse.report.metrics.metric import application
 from .network_application import NetworkApplication
 from .network import Network
 
+
 @application(name="traffic_routing", activates_on="step")
 class RoutingMetric:
     """Observer metric that extracts routing results from completed packets.
@@ -13,8 +14,7 @@ class RoutingMetric:
     formats their delay and hop information for reporting.
     """
 
-    def __call__(self, app: NetworkApplication, _placement, infra: Network,
-                 **_kwargs):
+    def __call__(self, app: NetworkApplication, _placement, infra: Network, **_kwargs):
         """Extract and format metrics from the application's completed packets.
 
         Args:
@@ -31,29 +31,21 @@ class RoutingMetric:
         step_results = {}
 
         if infra.step_telemetry:
-
             for _, (packet, hop_data) in enumerate(infra.step_telemetry):
                 prefix = (
-                    f"step_{app.current_step}_pkt_{packet.id}"
-                    f"_hop_{packet.hop_count}"
+                    f"step_{app.current_step}_pkt_{packet.id}_hop_{packet.hop_count}"
                 )
 
                 step_results[f"{prefix}_hop"] = hop_data.hop
-                step_results[f"{prefix}_processing_ms"] = float(
-                    hop_data.processing_ms
-                )
-                step_results[f"{prefix}_queue_ms"] = float(
-                    hop_data.queue_ms
-                )
+                step_results[f"{prefix}_processing_ms"] = float(hop_data.processing_ms)
+                step_results[f"{prefix}_queue_ms"] = float(hop_data.queue_ms)
                 step_results[f"{prefix}_transmission_ms"] = float(
                     hop_data.transmission_ms
                 )
                 step_results[f"{prefix}_propagation_ms"] = float(
                     hop_data.propagation_ms
                 )
-                step_results[f"{prefix}_queue_length"] = float(
-                    hop_data.queue_length
-                )
+                step_results[f"{prefix}_queue_length"] = float(hop_data.queue_length)
                 step_results[f"{prefix}_arrival_at_next"] = float(
                     hop_data.arrival_at_next
                 )
