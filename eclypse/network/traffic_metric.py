@@ -1,7 +1,7 @@
 """Module containing the traffic routing metric for the ECLYPSE framework."""
 
 from eclypse.report.metrics.metric import application
-from network_application import NetworkAwareApplication
+from network_application import NetworkApplication
 from network import Network
 
 @application(name="traffic_routing", activates_on="step")
@@ -13,12 +13,12 @@ class RoutingMetric:
     formats their delay and hop information for reporting.
     """
 
-    def __call__(self, app: NetworkAwareApplication, _placement, infra: Network,
+    def __call__(self, app: NetworkApplication, _placement, infra: Network,
                  **_kwargs):
         """Extract and format metrics from the application's completed packets.
 
         Args:
-            app (NetworkAwareApplication): The application instance containing the
+            app (NetworkApplication): The application instance containing the
                 'completed_packets' attribute.
             placement: The placement service used in the simulation.
             infra (Network): The network infrastructure model.

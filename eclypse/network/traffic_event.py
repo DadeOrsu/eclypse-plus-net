@@ -4,7 +4,7 @@ import random
 from collections import defaultdict
 from eclypse.workflow.event import EclypseEvent
 from eclypse.workflow.trigger import CascadeTrigger
-from network_application import NetworkAwareApplication
+from network_application import NetworkApplication
 from network import Network
 from constants import (
     DEFAULT_BANDWIDTH_MBPS
@@ -33,7 +33,7 @@ class RoutingEvent(EclypseEvent):
             triggers=[CascadeTrigger("step")]
         )
 
-    def _inject_generated_packets(self, app: NetworkAwareApplication,
+    def _inject_generated_packets(self, app: NetworkApplication,
                                   placement, infra: Network) -> None:
         """Inject new packets into the network infrastructure.
 
@@ -42,7 +42,7 @@ class RoutingEvent(EclypseEvent):
         the router buffer of their source node.
 
         Args:
-            app (NetworkAwareApplication): The application layer containing generated \
+            app (NetworkApplication): The application layer containing generated \
             packets.
             placement: The placement strategy to resolve service to node mapping.
             infra (Network): The network infrastructure containing router buffers.
@@ -154,7 +154,7 @@ class RoutingEvent(EclypseEvent):
                 else:
                     next_step_buffers[next_node].append(pkt)
 
-    def __call__(self, app: NetworkAwareApplication, placement, infra: Network,
+    def __call__(self, app: NetworkApplication, placement, infra: Network,
                  **_kwargs):
         """Execute the routing logic for packets generated in the current step.
 
@@ -164,7 +164,7 @@ class RoutingEvent(EclypseEvent):
         the following step.
 
         Args:
-            app (NetworkAwareApplication): The application layer with generated \
+            app (NetworkApplication): The application layer with generated \
             packets and step info.
             placement: The placement strategy manager.
             infra (Network): The network infrastructure.

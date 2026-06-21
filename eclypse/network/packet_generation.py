@@ -2,7 +2,7 @@
 
 from eclypse.workflow.event import EclypseEvent
 from eclypse.workflow.trigger import CascadeTrigger
-from network_application import NetworkAwareApplication
+from network_application import NetworkApplication
 from network import Network
 
 
@@ -26,7 +26,7 @@ class PacketGenerationEvent(EclypseEvent):
         )
 
     def __call__(
-        self, app: NetworkAwareApplication, _placement, _infra: Network, **_kwargs
+        self, app: NetworkApplication, _placement, _infra: Network, **_kwargs
     ):
         """Generate packets for the current simulation step.
 
@@ -34,7 +34,7 @@ class PacketGenerationEvent(EclypseEvent):
         new traffic flows based on the application's configured patterns.
 
         Args:
-            app (NetworkAwareApplication): The application instance responsible for
+            app (NetworkApplication): The application instance responsible for
                 generating the packets.
             placement: The placement service used in the simulation.
             infra (Network): The network infrastructure model.

@@ -9,7 +9,7 @@ from constants import(
 )
 
 
-class NetworkAwareApplication(Application):
+class NetworkApplication(Application):
     """Extension of the standard ECLYPSE application class.
 
     Incorporates network traffic characteristics and stochastic
@@ -17,7 +17,7 @@ class NetworkAwareApplication(Application):
     """
 
     def __init__(self, *args, **kwargs):
-        """Initialize the NetworkAwareApplication.
+        """Initialize the NetworkApplication.
 
         Sets up the internal state required for packet generation tracking,
         including sequential IDs and packet buffers.
