@@ -11,7 +11,7 @@ from constants import (
 )
 
 
-class TrafficRoutingExecutionEvent(EclypseEvent):
+class RoutingEvent(EclypseEvent):
     """Worker event that executes routing logic and updates application state.
 
     This event is called exactly once per step by the simulation engine. It is

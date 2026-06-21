@@ -5,7 +5,7 @@ from network_application import NetworkAwareApplication
 from network import Network
 
 @application(name="traffic_routing", activates_on="step")
-class TrafficRoutingMetric:
+class RoutingMetric:
     """Observer metric that extracts routing results from completed packets.
 
     This metric is called by the Reporter. It performs no complex calculations;
