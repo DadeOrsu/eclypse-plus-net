@@ -1,7 +1,7 @@
 """Module containing the traffic routing execution event for the ECLYPSE framework."""
 
 import random
-from collections import defaultdict
+from collections import defaultdict, deque
 from eclypse.workflow.event import EclypseEvent
 from eclypse.workflow.trigger import CascadeTrigger
 from .network_application import NetworkApplication
@@ -82,7 +82,7 @@ class RoutingEvent(EclypseEvent):
                 - The first maps the previous node ID to a list of its packets.
                 - The second maps the previous node ID to its link bandwidth in Mbps.
         """
-        incoming_queues = defaultdict(list)
+        incoming_queues = defaultdict(deque)
 
         for pkt in buffer:
             incoming_queues[pkt.previous_node].append(pkt)
@@ -101,7 +101,7 @@ class RoutingEvent(EclypseEvent):
         return incoming_queues, bws
 
     def _build_probabilistic_queue(
-        self, incoming_queues: dict[str, list], bandwidths: dict[str, float]
+        self, incoming_queues: dict[str, deque], bandwidths: dict[str, float]
     ) -> list:
         """Merge input queues probabilistically based on bandwidth.
 
@@ -131,7 +131,7 @@ class RoutingEvent(EclypseEvent):
                 0
             ]
             # Remove packet from the chosen queue and insert it into the merged queue
-            packet = incoming_queues[chosen_source].pop(0)
+            packet = incoming_queues[chosen_source].popleft()
             merged_queue.append(packet)
 
         return merged_queue
