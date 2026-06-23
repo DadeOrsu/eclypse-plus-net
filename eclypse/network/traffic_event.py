@@ -14,8 +14,7 @@ class RoutingEvent(EclypseEvent):
 
     This event is called exactly once per step by the simulation engine. It is
     responsible for taking generated packets, resolving their source and
-    destination placements, performing the heavy routing calculations, and
-    moving the results to the completed packets basket.
+    destination placements, performing the heavy routing calculations.
     """
 
     def __init__(self, step_duration_s=0.001):
@@ -58,12 +57,13 @@ class RoutingEvent(EclypseEvent):
             packet.dst = dst_node
             packet.current_node = src_node
 
-            infra.router_buffers[src_node].append(packet)
+            packet.previous_node = None
+            infra.local_injections[src_node].append(packet)
 
         app.generated_packets.clear()
 
     def _prepare_incoming_queues(
-        self, router: str, buffer: list, infra: Network
+        self, router: str, buffer: list, local_buffer: list, infra: Network
     ) -> tuple[dict, dict]:
         """Separate incoming packets by source and determine link bandwidths.
 
@@ -82,12 +82,16 @@ class RoutingEvent(EclypseEvent):
                 - The second maps the previous node ID to its link bandwidth in Mbps.
         """
         incoming_queues = defaultdict(list)
+
         for pkt in buffer:
             incoming_queues[pkt.previous_node].append(pkt)
 
+        if local_buffer:
+            incoming_queues[None].extend(local_buffer)
+
         bws = {}
         for prev_node in incoming_queues:
-            if prev_node == "APP":
+            if prev_node is None:
                 bws[prev_node] = DEFAULT_BANDWIDTH_MBPS * 10
             else:
                 edge_data = infra.get_edge_data(prev_node, router, default={})
@@ -184,19 +188,21 @@ class RoutingEvent(EclypseEvent):
         self._inject_generated_packets(app, placement, infra)
 
         # Process existing router buffers
-        active_routers = list(infra.router_buffers.keys())
+        active_routers = set(infra.router_buffers.keys()) | set(infra.local_injections.keys())
 
         for router in active_routers:
-            buffer = infra.router_buffers[router]
-            if not buffer:
+            buffer = infra.router_buffers.get(router, [])
+            local_buffer = infra.local_injections.get(router, [])
+
+            if not buffer and not local_buffer:
                 continue
 
-            incoming_queues, bws = self._prepare_incoming_queues(router, buffer, infra)
+            incoming_queues, bws = self._prepare_incoming_queues(router, buffer, local_buffer, infra)
             shuffled_packets = self._build_probabilistic_queue(incoming_queues, bws)
 
             if len(shuffled_packets) > 1:
                 order_log = ", ".join(
-                    [f"{p.id} ({p.previous_node})" for p in shuffled_packets]
+                    [f"{p.id} ({p.previous_node or 'LOCAL'})" for p in shuffled_packets]
                 )
                 infra.logger.info(f"{router} order: [{order_log}]")
 
@@ -204,7 +210,10 @@ class RoutingEvent(EclypseEvent):
                 shuffled_packets, current_time_s, infra, next_step_buffers
             )
 
-            infra.router_buffers[router].clear()
+            if router in infra.router_buffers:
+                infra.router_buffers[router].clear()
+            if router in infra.local_injections:
+                infra.local_injections[router].clear()
 
         # Move the landed packets to the new routers for the next round
         for router, pkts in next_step_buffers.items():

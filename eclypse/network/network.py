@@ -60,7 +60,7 @@ class Packet:
     size: int
     step_created: int
     current_node: str = ""
-    previous_node: str = "APP"
+    previous_node: str | None = None
     hop_count: int = 0
 
 
@@ -104,6 +104,8 @@ class Network(Infrastructure):
         self.link_step_time = defaultdict(float)
         # The list of packets that are sitting in a specific node waiting
         self.router_buffers = defaultdict(list)
+        # The list of packets to be injected in the router from the application
+        self.local_injections = defaultdict(list)
         # Hop telemetry tracking
         self.step_telemetry = []
 
