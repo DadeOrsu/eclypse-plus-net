@@ -51,6 +51,7 @@ class RoutingEvent(EclypseEvent):
                 src_node = placement.service_placement(service_id=packet.src)
                 dst_node = placement.service_placement(service_id=packet.dst)
             except KeyError:
+                infra.logger.debug(f"Packet dropped locally: Unmapped service {KeyError}")
                 continue
 
             packet.src = src_node
