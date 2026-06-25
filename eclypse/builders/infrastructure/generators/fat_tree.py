@@ -15,7 +15,10 @@ ACM SIGCOMM CCR, 2008, https://dl.acm.org/doi/10.1145/1402958.1402967
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import (
+    TYPE_CHECKING,
+    TypeVar,
+)
 
 from eclypse.graph import Infrastructure
 

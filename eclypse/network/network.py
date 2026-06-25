@@ -1,18 +1,24 @@
 """Module containing the network infrastructure extension for the ECLYPSE framework."""
 
-import networkx as nx
-from collections import defaultdict, deque
-from eclypse.graph import Infrastructure
+from collections import (
+    defaultdict,
+    deque,
+)
 from dataclasses import dataclass
+
+import networkx as nx
+
+from eclypse.graph import Infrastructure
+
 from .constants import (
+    BYTES_TO_BITS,
     DEFAULT_BANDWIDTH_MBPS,
     DEFAULT_LENGTH_KM,
     DEFAULT_PROPAGATION_SPEED_KM_S,
+    MBPS_TO_BPS,
     MIN_LENGTH_KM,
     MIN_PROPAGATION_SPEED,
-    MBPS_TO_BPS,
     SEC_TO_MS,
-    BYTES_TO_BITS,
 )
 
 
@@ -113,6 +119,8 @@ class Network(Infrastructure):
         self,
         u_of_edge: str,
         v_of_edge: str,
+        symmetric: bool = False,
+        strict: bool = True,
         bandwidth_mbps: float = DEFAULT_BANDWIDTH_MBPS,
         length_km: float = DEFAULT_LENGTH_KM,
         propagation_speed_km_s: float = DEFAULT_PROPAGATION_SPEED_KM_S,
@@ -127,6 +135,10 @@ class Network(Infrastructure):
         Args:
             u_of_edge (str): The source node ID of the edge.
             v_of_edge (str): The destination node ID of the edge.
+            symmetric (bool): If True, adds the edge in both directions.\
+                Defaults to False.
+            strict (bool): If True, raises an error if the assets are inconsistent.\
+                If False, logs a warning. Defaults to True.
             bandwidth_mbps (float): The link bandwidth in Mbps. Defaults to 100.0.
             length_km (float): The length of the physical link in km. Defaults to 1.0.
             propagation_speed_km_s (float): The signal propagation speed in km/s.
@@ -137,7 +149,9 @@ class Network(Infrastructure):
         attr["length_km"] = length_km
         attr["propagation_speed_km_s"] = propagation_speed_km_s
         attr["cost"] = 1 / (bandwidth_mbps * MBPS_TO_BPS)  # Cost for OSPF routing
-        super().add_edge(u_of_edge, v_of_edge, **attr)
+        super().add_edge(
+            u_of_edge, v_of_edge, symmetric=symmetric, strict=strict, **attr
+        )
 
     def update_link_latencies(self):
         """Calculate and update the latency attribute for each link.

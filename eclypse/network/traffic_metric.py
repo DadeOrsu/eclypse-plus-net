@@ -1,8 +1,9 @@
 """Module containing the traffic routing metric for the ECLYPSE framework."""
 
 from eclypse.report.metrics.metric import application
-from .network_application import NetworkApplication
+
 from .network import Network
+from .network_application import NetworkApplication
 
 
 @application(name="traffic_routing", activates_on="step")

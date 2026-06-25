@@ -1,9 +1,14 @@
 """Module extending the ECLYPSE application model with network capabilities."""
 
 import numpy as np
+
 from eclypse.graph import Application
+
+from .constants import (
+    DEFAULT_AVG_PACKETS_PER_STEP,
+    DEFAULT_PACKET_SIZE_BYTES,
+)
 from .network import Packet
-from .constants import DEFAULT_AVG_PACKETS_PER_STEP, DEFAULT_PACKET_SIZE_BYTES
 
 
 class NetworkApplication(Application):
@@ -33,6 +38,8 @@ class NetworkApplication(Application):
         self,
         u_of_edge: str,
         v_of_edge: str,
+        symmetric: bool = False,
+        strict: bool = True,
         packet_size_bytes: int = DEFAULT_PACKET_SIZE_BYTES,
         avg_packets_per_step: float = DEFAULT_AVG_PACKETS_PER_STEP,
         **attr,
@@ -46,6 +53,10 @@ class NetworkApplication(Application):
         Args:
             u_of_edge (str): The source service ID of the logical flow.
             v_of_edge (str): The destination service ID of the logical flow.
+            symmetric (bool): If True, adds the edge in both directions.\
+                Defaults to False.
+            strict (bool): If True, raises an error if the assets are inconsistent.\
+                If False, logs a warning. Defaults to True.
             packet_size_bytes (int, optional): The fixed size in bytes for packets
                 generated on this flow. Defaults to DEFAULT_PACKET_SIZE_BYTES.
             avg_packets_per_step (float, optional): The expected average number of
@@ -63,12 +74,14 @@ class NetworkApplication(Application):
             raise ValueError(f"Packet rate must be >= 0. Found: {avg_packets_per_step}")
         attr["packet_size_bytes"] = packet_size_bytes
         attr["avg_packets_per_step"] = avg_packets_per_step
-        super().add_edge(u_of_edge, v_of_edge, **attr)
+        super().add_edge(
+            u_of_edge, v_of_edge, symmetric=symmetric, strict=strict, **attr
+        )
 
         self.logger.info(
             f"Added flow {u_of_edge}->{v_of_edge}, "
             f"{avg_packets_per_step} pkt/step (avg), "
-            f"pkt/step (avg), size {packet_size_bytes}B"
+            f"size {packet_size_bytes}B"
         )
 
     def generate_traffic_for_step(self, step: int) -> None:
@@ -81,7 +94,7 @@ class NetworkApplication(Application):
         Args:
             step (int): The current simulation step number to stamp on packets.
         """
-        self.generated_packets = []
+        self.generated_packets.clear()
 
         # Iterate over all edges (flows) defined in the application
         for u, v, data in self.edges(data=True):

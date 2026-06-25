@@ -1,7 +1,8 @@
 """A fault injection event that simulates a link failure in the network."""
 
-from .network import Network
 from eclypse.workflow.event import once_at
+
+from .network import Network
 
 
 @once_at(step=50, event_type="infrastructure", name="fault_injection")

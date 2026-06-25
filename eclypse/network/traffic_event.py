@@ -1,12 +1,17 @@
 """Module containing the traffic routing execution event for the ECLYPSE framework."""
 
 import random
-from collections import defaultdict, deque
+from collections import (
+    defaultdict,
+    deque,
+)
+
 from eclypse.workflow.event import EclypseEvent
 from eclypse.workflow.trigger import CascadeTrigger
-from .network_application import NetworkApplication
-from .network import Network
+
 from .constants import DEFAULT_BANDWIDTH_MBPS
+from .network import Network
+from .network_application import NetworkApplication
 
 
 class RoutingEvent(EclypseEvent):
@@ -76,6 +81,8 @@ class RoutingEvent(EclypseEvent):
         Args:
             router (str): The identifier of the router being processed.
             buffer (list): The list of packets currently in the router's buffer.
+            local_buffer (list): The local buffer used for injecting the created in \
+                this step packets.
             infra (Network): The network infrastructure to query for link data.
 
         Returns:
@@ -83,7 +90,7 @@ class RoutingEvent(EclypseEvent):
                 - The first maps the previous node ID to a list of its packets.
                 - The second maps the previous node ID to its link bandwidth in Mbps.
         """
-        incoming_queues = defaultdict(deque)
+        incoming_queues: dict[str | None, deque] = defaultdict(deque)
 
         for pkt in buffer:
             incoming_queues[pkt.previous_node].append(pkt)
@@ -91,7 +98,7 @@ class RoutingEvent(EclypseEvent):
         if local_buffer:
             incoming_queues[None].extend(local_buffer)
 
-        bws = {}
+        bws: dict[str | None, float] = {}
         for prev_node in incoming_queues:
             if prev_node is None:
                 bws[prev_node] = DEFAULT_BANDWIDTH_MBPS * 10
@@ -184,13 +191,15 @@ class RoutingEvent(EclypseEvent):
         infra.step_telemetry.clear()
         current_time_s = app.current_step * self.step_duration_s
 
-        next_step_buffers = defaultdict(list)
+        next_step_buffers: dict[str, list] = defaultdict(list)
 
         # Inject new traffic
         self._inject_generated_packets(app, placement, infra)
 
         # Process existing router buffers
-        active_routers = set(infra.router_buffers.keys()) | set(infra.local_injections.keys())
+        active_routers = set(infra.router_buffers.keys()) | set(
+            infra.local_injections.keys()
+        )
 
         for router in active_routers:
             buffer = infra.router_buffers.get(router, [])
@@ -199,7 +208,9 @@ class RoutingEvent(EclypseEvent):
             if not buffer and not local_buffer:
                 continue
 
-            incoming_queues, bws = self._prepare_incoming_queues(router, buffer, local_buffer, infra)
+            incoming_queues, bws = self._prepare_incoming_queues(
+                router, buffer, local_buffer, infra
+            )
             shuffled_packets = self._build_probabilistic_queue(incoming_queues, bws)
 
             if len(shuffled_packets) > 1:
