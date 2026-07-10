@@ -22,6 +22,62 @@ from .constants import (
 )
 
 
+class NetNode:
+    """Abstract base class representing a node in the network infrastructure."""
+
+    def __init__(self, name: str, **assets):
+        """Initialize a new network node.
+
+        Args:
+            name (str): The unique identifier of the node.
+            **assets: Arbitrary keyword arguments representing the node's resources and\
+            properties.
+        """
+        self.name = name
+        self.assets = assets
+
+
+class Router(NetNode):
+    """Network routing node.
+
+    Represents a node dedicated exclusively to routing network traffic.
+    It does not possess computational capabilities and cannot host application services.
+    """
+
+    def __init__(self, name: str, **assets):
+        """Initialize a new router node.
+
+        Args:
+            name (str): The unique identifier of the router.
+            **assets: Arbitrary keyword arguments for additional properties.
+        """
+        assets["role"] = "router"
+        # Reset computational resources to 0 to ensure standard placement always fails
+        assets["cpu"] = 0
+        assets["ram"] = 0
+        assets["disk"] = 0
+        super().__init__(name, **assets)
+
+
+class Host(NetNode):
+    """Computational network node.
+
+    Represents an end-host capable of hosting application services, executing
+    computational tasks, and generating network traffic.
+    """
+
+    def __init__(self, name: str, **assets):
+        """Initialize a new host node.
+
+        Args:
+            name (str): The unique identifier of the host.
+            **assets: Arbitrary keyword arguments representing computational assets\
+            and properties.
+        """
+        assets["role"] = "host"
+        super().__init__(name, **assets)
+
+
 @dataclass(slots=True)
 class HopInfo:
     """Represent detailed telemetry information for a single network hop.
@@ -313,3 +369,35 @@ class Network(Infrastructure):
         """
         super().remove_edge(u, v)
         self.logger.warning(f"[FAILURE] Link {u} -> {v} removed.")
+
+    def add_router(self, node_id: str, **attr):
+        """Add a router to the network topology.
+
+        Args:
+            node_id: The identifier of the router.
+            **attr: Additional attributes for the router configuration.
+        """
+        router = Router(name=node_id, **attr)
+        super().add_node(router.name, **router.assets)
+        self.logger.debug(f"Added Router node: {node_id}")
+
+    def add_host(self, node_id: str, **attr):
+        """Add a computational host to the network topology.
+
+        Args:
+            node_id: The identifier of the host.
+            **attr: Additional attributes for the host configuration.
+        """
+        host = Host(name=node_id, **attr)
+        super().add_node(host.name, **host.assets)
+        self.logger.debug(f"Added Host node: {node_id}")
+
+    @property
+    def hosts(self) -> list[str]:
+        """Return a list of all nodes configured as hosts."""
+        return [n for n, d in self.nodes(data=True) if d.get("role", "host") == "host"]
+
+    @property
+    def routers(self) -> list[str]:
+        """Return a list of all nodes configured as routers."""
+        return [n for n, d in self.nodes(data=True) if d.get("role") == "router"]
