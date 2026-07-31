@@ -170,6 +170,8 @@ class Network(Infrastructure):
         self.local_injections = defaultdict(list)
         # Hop telemetry tracking
         self.step_telemetry = []
+        # Count of the dropped packets
+        self.dropped_packets = 0
 
     def add_edge(
         self,
@@ -180,6 +182,7 @@ class Network(Infrastructure):
         bandwidth_mbps: float = DEFAULT_BANDWIDTH_MBPS,
         length_km: float = DEFAULT_LENGTH_KM,
         propagation_speed_km_s: float = DEFAULT_PROPAGATION_SPEED_KM_S,
+        max_queue_size: int = 100,
         **attr,
     ):
         """Add an edge to the network with queuing parameters.
@@ -199,11 +202,14 @@ class Network(Infrastructure):
             length_km (float): The length of the physical link in km. Defaults to 1.0.
             propagation_speed_km_s (float): The signal propagation speed in km/s.
                 Defaults to 200000.0.
+            max_queue_size (int): The maximum number of packets that can be queued\
+                on this link. Defaults to 100.
             **attr: Additional attributes to apply to the edge.
         """
         attr["bandwidth_mbps"] = bandwidth_mbps
         attr["length_km"] = length_km
         attr["propagation_speed_km_s"] = propagation_speed_km_s
+        attr["max_queue_size"] = max_queue_size
         attr["cost"] = 1 / (bandwidth_mbps * MBPS_TO_BPS)  # Cost for OSPF routing
         super().add_edge(
             u_of_edge, v_of_edge, symmetric=symmetric, strict=strict, **attr
@@ -311,6 +317,18 @@ class Network(Infrastructure):
         # Update the last time we processed this link to the current time
         # So we can calculate the next delta_t
         self.link_step_time[(u, v)] = current_time
+
+        # DROPTAIL LOGIC: If the queue is full, drop the incoming packet
+        max_q_size = edge_data.get("max_queue_size", float("inf"))
+
+        if len(queue) >= max_q_size:
+            # If the queue is full, we drop the packet and log the event
+            self.dropped_packets += 1
+            self.logger.debug(
+                f"Packet {packet.id} DROPPED at {u}: Queue full on link {u}->{v} "
+                f"(Limit: {max_q_size})"
+            )
+            return None
 
         d_proc = self.processing_time(u, v)
 
