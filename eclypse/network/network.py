@@ -90,6 +90,8 @@ class HopInfo:
         propagation_ms (float): The propagation delay in milliseconds.
         queue_length (int): The number of packets in the queue at arrival time.
         arrival_at_next (float): The absolute arrival time at the next node in ms.
+        dropped (bool): Indicates if the packet was dropped at this hop. \
+            Defaults to False.
     """
 
     hop: str
@@ -99,6 +101,7 @@ class HopInfo:
     propagation_ms: float
     queue_length: int
     arrival_at_next: float
+    dropped: bool = False
 
 
 @dataclass(slots=True)
@@ -324,6 +327,19 @@ class Network(Infrastructure):
         if len(queue) >= max_q_size:
             # If the queue is full, we drop the packet and log the event
             self.dropped_packets += 1
+            drop_info = HopInfo(
+                hop=f"{u}->{v}",
+                processing_ms=0.0,
+                queue_ms=0.0,
+                transmission_ms=0.0,
+                propagation_ms=0.0,
+                queue_length=len(queue),
+                arrival_at_next=current_time
+                * SEC_TO_MS,  # time when the packet dropped
+                dropped=True,  # Flag indicating the packet was dropped
+            )
+            self.step_telemetry.append((packet, drop_info))
+
             self.logger.debug(
                 f"Packet {packet.id} DROPPED at {u}: Queue full on link {u}->{v} "
                 f"(Limit: {max_q_size})"

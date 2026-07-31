@@ -19,8 +19,7 @@ class RoutingMetric:
         """Extract and format metrics from the application's completed packets.
 
         Args:
-            app (NetworkApplication): The application instance containing the
-                'completed_packets' attribute.
+            app (NetworkApplication): The application instance being observed.
             placement: The placement service used in the simulation.
             infra (Network): The network infrastructure model.
             **kwargs: Additional keyword arguments provided by the framework.
@@ -50,5 +49,6 @@ class RoutingMetric:
                 step_results[f"{prefix}_arrival_at_next"] = float(
                     hop_data.arrival_at_next
                 )
+                step_results[f"{prefix}_dropped"] = bool(hop_data.dropped)
 
         return step_results if step_results else None
