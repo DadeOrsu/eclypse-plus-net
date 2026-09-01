@@ -129,18 +129,20 @@ class Packet:
     hop_count: int = 0
 
 
-def ospf_path_algorithm(g: nx.Graph, source: str, target: str) -> list[str]:
-    """Compute the shortest path using Dijkstra's algorithm based on OSPF cost.
+def path_algorithm(g: nx.Graph, source: str, target: str) -> list[str]:
+    """Compute the shortest path using the precomputed FIB.
 
-    Args:
-        g (nx.Graph): The network graph topology.
-        source (str): The starting node identifier.
-        target (str): The destination node identifier.
-
-    Returns:
-        list[str]: A list of node identifiers representing the shortest path.
+    This acts as a bridge between Eclypse's internal engine and our fast O(1)
+    routing table, preventing Eclypse from repeatedly executing Dijkstra.
     """
-    return nx.dijkstra_path(g, source, target, weight="cost")
+    if getattr(g, "full_paths", None) is None:
+        g.build_routing_tables()
+
+    # Retrieve the full path in O(1)
+    if source not in g.full_paths or target not in g.full_paths[source]:
+        return []
+
+    return g.full_paths[source][target]
 
 
 class Network(Infrastructure):
@@ -160,12 +162,21 @@ class Network(Infrastructure):
             *args: Variable length argument list passed to the base class.
             **kwargs: Arbitrary keyword arguments passed to the base class.
         """
-        # Assign the routing algorithm for standard execution
-        kwargs["path_algorithm"] = ospf_path_algorithm
+        # Tell ECLYPSE to use our custom path algorithm for routing
+        kwargs["path_algorithm"] = path_algorithm
+
         super().__init__(*args, **kwargs)
-        # The queues of packets waiting to be transmitted on a specific link
+
+        # Initialization of the variables for the FIB to None
+        self.fib = None
+        self.full_paths = None
+        # Initialization of the queue and telemetry structures for each link
         self.link_queues = defaultdict(deque)
-        # The registered time a packet traversed the link
+        # Track the total bytes in each link queue for O(1) queue delay
+        # calculation
+        self.link_queues_bytes = defaultdict(int)
+        # Track the last time each link was serviced to calculate elapsed time
+        # for queue processing
         self.link_step_time = defaultdict(float)
         # The list of packets that are sitting in a specific node waiting
         self.router_buffers = defaultdict(list)
@@ -269,31 +280,62 @@ class Network(Infrastructure):
 
                 self[u][v]["latency"] = d_proc + d_prop + d_transm
 
+    def build_routing_tables(self):
+        """Pre-calculate the Forwarding Information Base (FIB) for all nodes.
+
+        This is executed only once to reduce the computational cost of routing.
+        """
+        self.fib = defaultdict(dict)
+        # Save all complete paths in a class variable
+        self.full_paths = dict(nx.all_pairs_dijkstra_path(self, weight="cost"))
+
+        for source_node, targets in self.full_paths.items():
+            for target_node, p in targets.items():
+                if source_node != target_node and len(p) > 1:
+                    # Populate the FIB only with the next-hop for the forward_one_hop
+                    self.fib[source_node][target_node] = p[1]
+
+    def get_next_hop(self, source: str, target: str) -> str | None:
+        """Retrieve the next-hop from the FIB in O(1) time.
+
+        Avoids calling the native path methods of Eclypse during routing.
+        """
+        if self.fib is None:
+            self.build_routing_tables()
+
+        if source not in self.fib or target not in self.fib[source]:
+            return None
+
+        return self.fib[source][target]
+
     def forward_one_hop(self, packet: Packet, current_time: float) -> str | None:
         """Calculate the next hop for a packet and update its telemetry state.
 
-        Resolves the next hop using OSPF routing, evaluates queuing, transmission,
-        processing, and propagation delays using store-and-forward logic, and
-        updates the packet's internal state.
+        Resolves the next hop using the precomputed FIB, evaluates queuing,
+        transmission,
+        processing, and propagation delays using store-and-forward logic in O(1), and
+        updates the packet's internal state. Also applies DropTail queue management.
 
         Args:
             packet (Packet): The packet object to be forwarded.
             current_time (float): The absolute simulation time in seconds.
 
         Returns:
-            str | None: The identifier of the next node, or None if no route exists.
+            str | None: The identifier of the next node, or None if no route exists
+                or if the packet is dropped due to queue congestion.
         """
         u = packet.current_node
 
-        # Dynamic calculation of the next hop using OSPF path algorithm
-        path = self.path(u, packet.dst, cost_attr="cost")
-        if not path:
+        # Resolve the next hop O(1) via FIB
+        v = self.get_next_hop(u, packet.dst)
+
+        if v is None:
             self.logger.warning(
                 f"Packet {packet.id} dropped: No routes for {packet.dst}"
             )
             return None
 
-        v = path[0][1]
+        # Obtain the edge data for the link u -> v, including bandwidth and queue size
         edge_data = self.get_edge_data(u, v, default={})
 
         R = edge_data.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS) * MBPS_TO_BPS
@@ -302,26 +344,28 @@ class Network(Infrastructure):
         # and the link bandwidth
         queue = self.link_queues[(u, v)]
 
-        # If there is a recorded time for the last packet processed on this link
+        # Empty the queue based on the elapsed time (O(1) tracking)
         if (u, v) in self.link_step_time and current_time > self.link_step_time[(u, v)]:
             delta_t = current_time - self.link_step_time[(u, v)]
             bits_service_capacity = delta_t * R
 
             # Only clear the queue of packets that the link had time to transmit.
             while queue and bits_service_capacity > 0:
-                front_packet_bits = queue[0].size * BYTES_TO_BITS
+                front_packet = queue[0]
+                front_packet_bits = front_packet.size * BYTES_TO_BITS
                 if bits_service_capacity >= front_packet_bits:
                     bits_service_capacity -= front_packet_bits
-                    queue.popleft()  # The packet has been fully transmitted, remove it
+                    queue.popleft()
+                    # Remove the size of the dequeued packet from the total bytes in the
+                    # link queue
+                    self.link_queues_bytes[(u, v)] -= front_packet.size
                 else:
                     # The packet at the front has been transmitted only partially.
                     break
 
-        # Update the last time we processed this link to the current time
-        # So we can calculate the next delta_t
         self.link_step_time[(u, v)] = current_time
 
-        # DROPTAIL LOGIC: If the queue is full, drop the incoming packet
+        # DropTail queue management: if the queue is full, drop the incoming packet
         max_q_size = edge_data.get("max_queue_size", float("inf"))
 
         if len(queue) >= max_q_size:
@@ -334,9 +378,8 @@ class Network(Infrastructure):
                 transmission_ms=0.0,
                 propagation_ms=0.0,
                 queue_length=len(queue),
-                arrival_at_next=current_time
-                * SEC_TO_MS,  # time when the packet dropped
-                dropped=True,  # Flag indicating the packet was dropped
+                arrival_at_next=current_time * SEC_TO_MS,
+                dropped=True,
             )
             self.step_telemetry.append((packet, drop_info))
 
@@ -348,19 +391,21 @@ class Network(Infrastructure):
 
         d_proc = self.processing_time(u, v)
 
-        # Calculate the queuing delay based on the packets actually left in the queue
-        d_queue = 0.0
-        if R > 0:
-            for queued_packet in queue:
-                d_queue += (queued_packet.size * BYTES_TO_BITS) / R
+        # The calculation of the queue delay is done in O(1) using the tracking variable
+        d_queue = self.link_queues_bytes[u, v] * BYTES_TO_BITS / R if R > 0 else 0.0
 
         d_transm = ((packet.size * BYTES_TO_BITS) / R) if R > 0 else 0.0
 
         length = edge_data.get("length_km", MIN_LENGTH_KM)
         speed = edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
         d_prop = (length / speed) if speed > 0 else 0.0
-        # Queue the current packet
+
+        # Save the current queue length for telemetry before adding the new packet
+        current_queue_length = len(queue)
+
+        # Enqueue the packet and update the total bytes in the link queue
         queue.append(packet)
+        self.link_queues_bytes[(u, v)] += packet.size
 
         # Calculate the times for the telemetry
         hop_delay_ms = (d_proc + d_queue + d_transm + d_prop) * SEC_TO_MS
@@ -373,8 +418,9 @@ class Network(Infrastructure):
             queue_ms=d_queue * SEC_TO_MS,
             transmission_ms=d_transm * SEC_TO_MS,
             propagation_ms=d_prop * SEC_TO_MS,
-            queue_length=len(queue),
+            queue_length=current_queue_length,
             arrival_at_next=arrival_time_ms,
+            dropped=False,
         )
         self.step_telemetry.append((packet, hop_info))
 
@@ -392,6 +438,10 @@ class Network(Infrastructure):
             n (str): The ID of the node to remove.
         """
         super().remove_node(n)
+
+        self.fib = None
+        self.full_paths = None
+
         self.logger.warning(f"[FAILURE] Node {n} removed.")
 
     def remove_edge(self, u: str, v: str):
@@ -402,6 +452,10 @@ class Network(Infrastructure):
             v (str): The destination node ID of the edge.
         """
         super().remove_edge(u, v)
+
+        self.fib = None
+        self.full_paths = None
+
         self.logger.warning(f"[FAILURE] Link {u} -> {v} removed.")
 
     def add_router(self, node_id: str, **attr):
