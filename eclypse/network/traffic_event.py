@@ -73,7 +73,7 @@ class RoutingEvent(EclypseEvent):
             packet.current_node = src_node
 
             packet.previous_node = None
-            infra.local_injections[src_node].append(packet)
+            infra.nodes[src_node]["local_injections"].append(packet)
 
         app.generated_packets.clear()
 
@@ -201,7 +201,7 @@ class RoutingEvent(EclypseEvent):
 
         # Elaboration of the hosts
         for host in infra.hosts:
-            local_buffer = infra.local_injections.get(host, [])
+            local_buffer = infra.nodes[host]["local_injections"]
 
             if not local_buffer:
                 continue
@@ -210,11 +210,11 @@ class RoutingEvent(EclypseEvent):
             self._forward_shuffled_packets(
                 local_buffer, current_time_s, infra, next_step_buffers
             )
-            infra.local_injections[host].clear()
+            local_buffer.clear()
 
         # Elaboration of the routers
         for router in infra.routers:
-            buffer = infra.router_buffers.get(router, [])
+            buffer = infra.nodes[router]["router_buffer"]
 
             if not buffer:
                 continue
@@ -234,11 +234,11 @@ class RoutingEvent(EclypseEvent):
             self._forward_shuffled_packets(
                 shuffled_packets, current_time_s, infra, next_step_buffers
             )
-            infra.router_buffers[router].clear()
+            buffer.clear()
 
         # Move the packets in transit to the next router buffers for the next step
         for node, pkts in next_step_buffers.items():
-            infra.router_buffers[node].extend(pkts)
+            infra.nodes[node]["router_buffer"].extend(pkts)
 
         # Update the link latencies based on the telemetry of the current step
         infra.update_link_latencies()

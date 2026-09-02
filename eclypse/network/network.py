@@ -170,18 +170,6 @@ class Network(Infrastructure):
         # Initialization of the variables for the FIB to None
         self.fib = None
         self.full_paths = None
-        # Initialization of the queue and telemetry structures for each link
-        self.link_queues = defaultdict(deque)
-        # Track the total bytes in each link queue for O(1) queue delay
-        # calculation
-        self.link_queues_bytes = defaultdict(int)
-        # Track the last time each link was serviced to calculate elapsed time
-        # for queue processing
-        self.link_step_time = defaultdict(float)
-        # The list of packets that are sitting in a specific node waiting
-        self.router_buffers = defaultdict(list)
-        # The list of packets to be injected in the router from the application
-        self.local_injections = defaultdict(list)
         # Hop telemetry tracking
         self.step_telemetry = []
         # Count of the dropped packets
@@ -225,6 +213,11 @@ class Network(Infrastructure):
         attr["propagation_speed_km_s"] = propagation_speed_km_s
         attr["max_queue_size"] = max_queue_size
         attr["cost"] = 1 / (bandwidth_mbps * MBPS_TO_BPS)  # Cost for OSPF routing
+
+        # Initialize the link queue and tracking variables for the new edge
+        attr["queue"] = deque()
+        attr["queue_bytes"] = 0
+        attr["step_time"] = 0.0
         super().add_edge(
             u_of_edge, v_of_edge, symmetric=symmetric, strict=strict, **attr
         )
@@ -336,37 +329,34 @@ class Network(Infrastructure):
             return None
 
         # Obtain the edge data for the link u -> v, including bandwidth and queue size
-        edge_data = self.get_edge_data(u, v, default={})
+        edge = self[u][v]
 
-        R = edge_data.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS) * MBPS_TO_BPS
+        R = edge.get("bandwidth_mbps", DEFAULT_BANDWIDTH_MBPS) * MBPS_TO_BPS
 
         # Calculate the queuing delay based on the current queue length
         # and the link bandwidth
-        queue = self.link_queues[(u, v)]
+        queue = edge["queue"]
 
         # Empty the queue based on the elapsed time (O(1) tracking)
-        if (u, v) in self.link_step_time and current_time > self.link_step_time[(u, v)]:
-            delta_t = current_time - self.link_step_time[(u, v)]
+        if current_time > edge["step_time"]:
+            delta_t = current_time - edge["step_time"]
             bits_service_capacity = delta_t * R
 
-            # Only clear the queue of packets that the link had time to transmit.
             while queue and bits_service_capacity > 0:
                 front_packet = queue[0]
                 front_packet_bits = front_packet.size * BYTES_TO_BITS
                 if bits_service_capacity >= front_packet_bits:
                     bits_service_capacity -= front_packet_bits
                     queue.popleft()
-                    # Remove the size of the dequeued packet from the total bytes in the
-                    # link queue
-                    self.link_queues_bytes[(u, v)] -= front_packet.size
+                    # Aggiornamento diretto dei byte dell'arco
+                    edge["queue_bytes"] -= front_packet.size
                 else:
-                    # The packet at the front has been transmitted only partially.
                     break
 
-        self.link_step_time[(u, v)] = current_time
+        edge["step_time"] = current_time
 
         # DropTail queue management: if the queue is full, drop the incoming packet
-        max_q_size = edge_data.get("max_queue_size", float("inf"))
+        max_q_size = edge.get("max_queue_size", float("inf"))
 
         if len(queue) >= max_q_size:
             # If the queue is full, we drop the packet and log the event
@@ -392,12 +382,12 @@ class Network(Infrastructure):
         d_proc = self.processing_time(u, v)
 
         # The calculation of the queue delay is done in O(1) using the tracking variable
-        d_queue = self.link_queues_bytes[u, v] * BYTES_TO_BITS / R if R > 0 else 0.0
+        d_queue = edge["queue_bytes"] * BYTES_TO_BITS / R if R > 0 else 0.0
 
         d_transm = ((packet.size * BYTES_TO_BITS) / R) if R > 0 else 0.0
 
-        length = edge_data.get("length_km", MIN_LENGTH_KM)
-        speed = edge_data.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
+        length = edge.get("length_km", MIN_LENGTH_KM)
+        speed = edge.get("propagation_speed_km_s", MIN_PROPAGATION_SPEED)
         d_prop = (length / speed) if speed > 0 else 0.0
 
         # Save the current queue length for telemetry before adding the new packet
@@ -405,7 +395,7 @@ class Network(Infrastructure):
 
         # Enqueue the packet and update the total bytes in the link queue
         queue.append(packet)
-        self.link_queues_bytes[(u, v)] += packet.size
+        edge["queue_bytes"] += packet.size
 
         # Calculate the times for the telemetry
         hop_delay_ms = (d_proc + d_queue + d_transm + d_prop) * SEC_TO_MS
@@ -465,6 +455,8 @@ class Network(Infrastructure):
             node_id: The identifier of the router.
             **attr: Additional attributes for the router configuration.
         """
+        attr["router_buffer"] = []
+        attr["local_injections"] = []
         router = Router(name=node_id, **attr)
         super().add_node(router.name, **router.assets)
         self.logger.debug(f"Added Router node: {node_id}")
@@ -476,6 +468,8 @@ class Network(Infrastructure):
             node_id: The identifier of the host.
             **attr: Additional attributes for the host configuration.
         """
+        attr["router_buffer"] = []
+        attr["local_injections"] = []
         host = Host(name=node_id, **attr)
         super().add_node(host.name, **host.assets)
         self.logger.debug(f"Added Host node: {node_id}")
